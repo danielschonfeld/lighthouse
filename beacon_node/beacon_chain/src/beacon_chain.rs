@@ -200,6 +200,8 @@ pub struct BeaconChain<T: BeaconChainTypes> {
     pub(crate) canonical_head: TimeoutRwLock<BeaconSnapshot<T::EthSpec>>,
     /// The root of the genesis block.
     pub genesis_block_root: Hash256,
+    /// The root of the genesis state.
+    pub genesis_state_root: Hash256,
     /// The root of the list of genesis validators, used during syncing.
     pub genesis_validators_root: Hash256,
 
@@ -456,6 +458,18 @@ impl<T: BeaconChainTypes> BeaconChain<T> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Returns the block root at the given slot, if any. Only returns roots in the canonical chain.
+    ///
+    /// ## Errors
+    ///
+    /// May return a database error.
+    pub fn block_root_at_slot(&self, slot: Slot) -> Result<Option<Hash256>, Error> {
+        process_results(self.rev_iter_block_roots()?, |mut iter| {
+            iter.find(|(_, this_slot)| *this_slot == slot)
+                .map(|(root, _)| root)
+        })
     }
 
     /// Returns the block at the given root, if any.

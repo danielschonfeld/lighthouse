@@ -380,6 +380,15 @@ where
             TColdStore,
         >,
     > {
+        let http_api_context = Arc::new(http_api::Context {
+            chain: self.beacon_chain.clone(),
+        });
+        let ctx = http_api_context.clone();
+        self.runtime_context
+            .unwrap()
+            .executor
+            .spawn_without_exit(async move { http_api::serve(ctx).await }, "cats");
+
         Client {
             beacon_chain: self.beacon_chain,
             network_globals: self.network_globals,
