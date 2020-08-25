@@ -1,35 +1,28 @@
 use crate::BlockId;
 use beacon_chain::{BeaconChain, BeaconChainTypes};
+use eth2::types::{BlockId as CoreBlockId, StateId as CoreStateId};
 use std::str::FromStr;
-use types::{BeaconState, Fork, Hash256, Slot};
+use types::{BeaconState, Fork, Hash256};
 
-#[derive(Debug)]
-pub enum StateId {
-    Head,
-    Genesis,
-    Finalized,
-    Justified,
-    Slot(Slot),
-    Root(Hash256),
-}
+pub struct StateId(CoreStateId);
 
 impl StateId {
     pub fn root<T: BeaconChainTypes>(
         &self,
         chain: &BeaconChain<T>,
     ) -> Result<Hash256, warp::Rejection> {
-        let block = match self {
-            StateId::Head => {
+        let block = match &self.0 {
+            CoreStateId::Head => {
                 return chain
                     .head_info()
                     .map(|head| head.state_root)
                     .map_err(crate::reject::beacon_chain_error)
             }
-            StateId::Genesis => return Ok(chain.genesis_state_root),
-            StateId::Finalized => BlockId::Finalized.block(chain),
-            StateId::Justified => BlockId::Justified.block(chain),
-            StateId::Slot(slot) => BlockId::Slot(*slot).block(chain),
-            StateId::Root(root) => return Ok(*root),
+            CoreStateId::Genesis => return Ok(chain.genesis_state_root),
+            CoreStateId::Finalized => BlockId(CoreBlockId::Finalized).block(chain),
+            CoreStateId::Justified => BlockId(CoreBlockId::Justified).block(chain),
+            CoreStateId::Slot(slot) => BlockId(CoreBlockId::Slot(*slot)).block(chain),
+            CoreStateId::Root(root) => return Ok(*root),
         }?;
 
         Ok(block.state_root())
@@ -46,14 +39,14 @@ impl StateId {
         &self,
         chain: &BeaconChain<T>,
     ) -> Result<BeaconState<T::EthSpec>, warp::Rejection> {
-        let (state_root, slot_opt) = match self {
-            StateId::Head => {
+        let (state_root, slot_opt) = match &self.0 {
+            CoreStateId::Head => {
                 return chain
                     .head_beacon_state()
                     .map_err(crate::reject::beacon_chain_error)
             }
-            StateId::Slot(slot) => (self.root(chain)?, Some(*slot)),
-            other => (other.root(chain)?, None),
+            CoreStateId::Slot(slot) => (self.root(chain)?, Some(*slot)),
+            _ => (self.root(chain)?, None),
         };
 
         chain
@@ -70,13 +63,13 @@ impl StateId {
     where
         F: Fn(&BeaconState<T::EthSpec>) -> Result<U, warp::Rejection>,
     {
-        let state = match self {
-            StateId::Head => {
+        let state = match &self.0 {
+            CoreStateId::Head => {
                 return chain
                     .map_head(|snapshot| func(&snapshot.beacon_state))
                     .map_err(crate::reject::beacon_chain_error)?
             }
-            other => other.state(chain)?,
+            _ => self.state(chain)?,
         };
 
         func(&state)
@@ -87,23 +80,6 @@ impl FromStr for StateId {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "head" => Ok(StateId::Head),
-            "genesis" => Ok(StateId::Genesis),
-            "finalized" => Ok(StateId::Finalized),
-            "justified" => Ok(StateId::Justified),
-            other => {
-                if other.starts_with("0x") {
-                    Hash256::from_str(s)
-                        .map(StateId::Root)
-                        .map_err(|e| format!("{} cannot be parsed as a root", e))
-                } else {
-                    u64::from_str(s)
-                        .map(Slot::new)
-                        .map(StateId::Slot)
-                        .map_err(|_| format!("{} cannot be parsed as a slot", s))
-                }
-            }
-        }
+        CoreStateId::from_str(s).map(Self)
     }
 }

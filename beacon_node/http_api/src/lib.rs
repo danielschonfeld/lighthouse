@@ -4,7 +4,7 @@ mod state_id;
 
 use beacon_chain::{BeaconChain, BeaconChainTypes};
 use block_id::BlockId;
-use http_api_common as api;
+use eth2::types as api_types;
 use serde::Serialize;
 use state_id::StateId;
 use std::sync::Arc;
@@ -46,8 +46,8 @@ pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
             blocking_json_task(move || {
                 state_id
                     .root(&chain)
-                    .map(api::RootData::from)
-                    .map(api::GenericResponse::from)
+                    .map(api_types::RootData::from)
+                    .map(api_types::GenericResponse::from)
             })
         });
 
@@ -56,7 +56,7 @@ pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
         .and(warp::path("fork"))
         .and(warp::path::end())
         .and_then(|state_id: StateId, chain: Arc<BeaconChain<T>>| {
-            blocking_json_task(move || state_id.fork(&chain).map(api::GenericResponse::from))
+            blocking_json_task(move || state_id.fork(&chain).map(api_types::GenericResponse::from))
         });
 
     let beacon_state_finality_checkpoints = beacon_states_path
@@ -67,13 +67,13 @@ pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
             blocking_json_task(move || {
                 state_id
                     .map_state(&chain, |state| {
-                        Ok(api::FinalityCheckpointsData {
+                        Ok(api_types::FinalityCheckpointsData {
                             previous_justified: state.previous_justified_checkpoint,
                             current_justified: state.current_justified_checkpoint,
                             finalized: state.finalized_checkpoint,
                         })
                     })
-                    .map(api::GenericResponse::from)
+                    .map(api_types::GenericResponse::from)
             })
         });
 
@@ -95,8 +95,8 @@ pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
             blocking_json_task(move || {
                 block_id
                     .root(&chain)
-                    .map(api::RootData::from)
-                    .map(api::GenericResponse::from)
+                    .map(api_types::RootData::from)
+                    .map(api_types::GenericResponse::from)
             })
         });
 
