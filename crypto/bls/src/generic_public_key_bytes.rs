@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
-use serde_hex::{encode as hex_encode, PrefixedHexVisitor};
+use serde_utils::hex::{encode as hex_encode, PrefixedHexVisitor};
 use ssz::{Decode, Encode};
 use std::convert::TryInto;
 use std::fmt;
