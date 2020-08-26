@@ -100,67 +100,6 @@ impl ApiTester {
         }
     }
 
-    pub async fn test_beacon_state_root(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
-            let result = self
-                .client
-                .beacon_states_root(state_id)
-                .await
-                .unwrap()
-                .map(|res| res.data.root);
-
-            let expected = match state_id {
-                StateId::Head => Some(self.chain.head_info().unwrap().state_root),
-                StateId::Genesis => Some(self.chain.genesis_state_root),
-                StateId::Finalized => {
-                    let finalized_slot = self
-                        .chain
-                        .head_info()
-                        .unwrap()
-                        .finalized_checkpoint
-                        .epoch
-                        .start_slot(E::slots_per_epoch());
-
-                    self.chain.state_root_at_slot(finalized_slot).unwrap()
-                }
-                StateId::Justified => {
-                    let justified_slot = self
-                        .chain
-                        .head_info()
-                        .unwrap()
-                        .current_justified_checkpoint
-                        .epoch
-                        .start_slot(E::slots_per_epoch());
-
-                    self.chain.state_root_at_slot(justified_slot).unwrap()
-                }
-                StateId::Slot(slot) => self.chain.state_root_at_slot(slot).unwrap(),
-                StateId::Root(root) => Some(root),
-            };
-
-            assert_eq!(result, expected, "{:?}", state_id);
-        }
-
-        self
-    }
-
-    pub async fn test_beacon_state_fork(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
-            let result = self
-                .client
-                .beacon_states_fork(state_id)
-                .await
-                .unwrap()
-                .map(|res| res.data);
-
-            let expected = self.get_state(state_id).map(|state| state.fork);
-
-            assert_eq!(result, expected, "{:?}", state_id);
-        }
-
-        self
-    }
-
     fn get_state(&self, state_id: StateId) -> Option<BeaconState<E>> {
         match state_id {
             StateId::Head => Some(self.chain.head().unwrap().beacon_state),
@@ -211,7 +150,68 @@ impl ApiTester {
         }
     }
 
-    pub async fn test_beacon_state_finality_checkpoints(self, state_ids: &[StateId]) -> Self {
+    pub async fn test_beacon_states_root(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let result = self
+                .client
+                .beacon_states_root(state_id)
+                .await
+                .unwrap()
+                .map(|res| res.data.root);
+
+            let expected = match state_id {
+                StateId::Head => Some(self.chain.head_info().unwrap().state_root),
+                StateId::Genesis => Some(self.chain.genesis_state_root),
+                StateId::Finalized => {
+                    let finalized_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .finalized_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
+
+                    self.chain.state_root_at_slot(finalized_slot).unwrap()
+                }
+                StateId::Justified => {
+                    let justified_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .current_justified_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
+
+                    self.chain.state_root_at_slot(justified_slot).unwrap()
+                }
+                StateId::Slot(slot) => self.chain.state_root_at_slot(slot).unwrap(),
+                StateId::Root(root) => Some(root),
+            };
+
+            assert_eq!(result, expected, "{:?}", state_id);
+        }
+
+        self
+    }
+
+    pub async fn test_beacon_states_fork(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let result = self
+                .client
+                .beacon_states_fork(state_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let expected = self.get_state(state_id).map(|state| state.fork);
+
+            assert_eq!(result, expected, "{:?}", state_id);
+        }
+
+        self
+    }
+
+    pub async fn test_beacon_states_finality_checkpoints(self, state_ids: &[StateId]) -> Self {
         for &state_id in state_ids {
             let result = self
                 .client
@@ -229,6 +229,40 @@ impl ApiTester {
                 });
 
             assert_eq!(result, expected, "{:?}", state_id);
+        }
+
+        self
+    }
+
+    fn get_block_root(&self, block_id: BlockId) -> Option<Hash256> {
+        match block_id {
+            BlockId::Head => Some(self.chain.head_info().unwrap().block_root),
+            BlockId::Genesis => Some(self.chain.genesis_block_root),
+            BlockId::Finalized => Some(self.chain.head_info().unwrap().finalized_checkpoint.root),
+            BlockId::Justified => Some(
+                self.chain
+                    .head_info()
+                    .unwrap()
+                    .current_justified_checkpoint
+                    .root,
+            ),
+            BlockId::Slot(slot) => self.chain.block_root_at_slot(slot).unwrap(),
+            BlockId::Root(root) => Some(root),
+        }
+    }
+
+    pub async fn test_beacon_blocks_root(self, block_ids: &[BlockId]) -> Self {
+        for &block_id in block_ids {
+            let result = self
+                .client
+                .beacon_blocks_root(block_id)
+                .await
+                .unwrap()
+                .map(|res| res.data.root);
+
+            let expected = self.get_block_root(block_id);
+
+            assert_eq!(result, expected, "{:?}", block_id);
         }
 
         self
@@ -251,23 +285,46 @@ fn interesting_state_ids() -> Vec<StateId> {
     ]
 }
 
+fn interesting_block_ids() -> Vec<BlockId> {
+    vec![
+        BlockId::Head,
+        BlockId::Genesis,
+        BlockId::Finalized,
+        BlockId::Justified,
+        BlockId::Slot(Slot::new(0)),
+        BlockId::Slot(Slot::new(32)),
+        BlockId::Slot(Slot::from(SKIPPED_SLOTS[0])),
+        BlockId::Slot(Slot::from(SKIPPED_SLOTS[1])),
+        BlockId::Slot(Slot::from(SKIPPED_SLOTS[2])),
+        BlockId::Slot(Slot::from(SKIPPED_SLOTS[3])),
+        BlockId::Root(Hash256::zero()),
+    ]
+}
+
 #[tokio::test(core_threads = 2)]
-async fn beacon_state_root() {
+async fn beacon_states_root() {
     ApiTester::new()
-        .test_beacon_state_root(&interesting_state_ids())
+        .test_beacon_states_root(&interesting_state_ids())
         .await;
 }
 
 #[tokio::test(core_threads = 2)]
-async fn beacon_state_fork() {
+async fn beacon_states_fork() {
     ApiTester::new()
-        .test_beacon_state_fork(&interesting_state_ids())
+        .test_beacon_states_fork(&interesting_state_ids())
         .await;
 }
 
 #[tokio::test(core_threads = 2)]
-async fn beacon_state_finality_checkpoints() {
+async fn beacon_states_finality_checkpoints() {
     ApiTester::new()
-        .test_beacon_state_finality_checkpoints(&interesting_state_ids())
+        .test_beacon_states_finality_checkpoints(&interesting_state_ids())
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_blocks_root() {
+    ApiTester::new()
+        .test_beacon_blocks_root(&interesting_block_ids())
         .await;
 }

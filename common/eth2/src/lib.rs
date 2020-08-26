@@ -78,4 +78,15 @@ impl BeaconNodeClient {
         self.get_opt(&format!("beacon/states/{}/finality_checkpoints", state_id))
             .await
     }
+
+    /// `GET beacon/blocks/{block_id}/root`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_blocks_root(
+        &self,
+        block_id: BlockId,
+    ) -> Result<Option<GenericResponse<RootData>>, Error> {
+        self.get_opt(&format!("beacon/blocks/{}/root", block_id))
+            .await
+    }
 }
