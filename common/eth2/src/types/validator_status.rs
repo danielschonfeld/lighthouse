@@ -15,6 +15,7 @@ pub struct ValidatorData {
     pub validator: Validator,
 }
 
+// TODO: make this match the spec.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ValidatorStatus {
     Unknown,

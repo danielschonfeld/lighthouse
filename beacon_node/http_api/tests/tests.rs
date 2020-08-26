@@ -275,6 +275,67 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_beacon_states_validator_id(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let state_opt = self.get_state(state_id);
+            let validators = match state_opt.as_ref() {
+                Some(state) => state.validators.clone().into(),
+                None => vec![],
+            };
+
+            for (i, validator) in validators.into_iter().enumerate() {
+                let validator_ids = &[
+                    ValidatorId::PublicKey(validator.pubkey.clone()),
+                    ValidatorId::Index(i as u64),
+                ];
+
+                for validator_id in validator_ids {
+                    let result = self
+                        .client
+                        .beacon_states_validator_id(state_id, validator_id)
+                        .await
+                        .unwrap()
+                        .map(|res| res.data);
+
+                    let state = if let Some(state) = state_opt.as_ref() {
+                        state
+                    } else {
+                        if result.is_none() {
+                            continue;
+                        } else {
+                            panic!(
+                                "should have returned none: {:?}, {:?}",
+                                state_id, validator_id
+                            )
+                        }
+                    };
+
+                    let expected = {
+                        let epoch = state.current_epoch();
+                        let finalized_epoch = state.finalized_checkpoint.epoch;
+                        let far_future_epoch = self.chain.spec.far_future_epoch;
+
+                        ValidatorData {
+                            index: i as u64,
+                            balance: state.balances[i],
+                            status: ValidatorStatus::from_validator(
+                                Some(&validator),
+                                epoch,
+                                finalized_epoch,
+                                far_future_epoch,
+                            ),
+                            validator: validator.clone(),
+                        }
+                    };
+
+                    assert_eq!(result, Some(expected), "{:?}, {:?}", state_id, validator_id);
+                }
+            }
+        }
+
+        self
+    }
+
     fn get_block_root(&self, block_id: BlockId) -> Option<Hash256> {
         match block_id {
             BlockId::Head => Some(self.chain.head_info().unwrap().block_root),
@@ -364,9 +425,16 @@ async fn beacon_states_finality_checkpoints() {
 }
 
 #[tokio::test(core_threads = 2)]
-async fn beacon_states_finality_validators() {
+async fn beacon_states_validators() {
     ApiTester::new()
         .test_beacon_states_validators(&interesting_state_ids())
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_states_validator_id() {
+    ApiTester::new()
+        .test_beacon_states_validator_id(&interesting_state_ids())
         .await;
 }
 

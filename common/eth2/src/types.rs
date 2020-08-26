@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-pub use types::{Checkpoint, Fork, Hash256, Slot};
+pub use types::{Checkpoint, Fork, Hash256, PublicKeyBytes, Slot};
 pub use validator_status::{ValidatorData, ValidatorStatus};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -131,4 +131,35 @@ pub struct FinalityCheckpointsData {
     pub previous_justified: Checkpoint,
     pub current_justified: Checkpoint,
     pub finalized: Checkpoint,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidatorId {
+    PublicKey(PublicKeyBytes),
+    Index(u64),
+}
+
+impl FromStr for ValidatorId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with("0x") {
+            serde_json::from_str(s)
+                .map(ValidatorId::PublicKey)
+                .map_err(|_| format!("{} cannot be parsed as a public key", s))
+        } else {
+            u64::from_str(s)
+                .map(ValidatorId::Index)
+                .map_err(|_| format!("{} cannot be parsed as a slot", s))
+        }
+    }
+}
+
+impl fmt::Display for ValidatorId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValidatorId::PublicKey(pubkey) => write!(f, "{:?}", pubkey),
+            ValidatorId::Index(index) => write!(f, "{}", index),
+        }
+    }
 }

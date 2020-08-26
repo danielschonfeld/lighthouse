@@ -90,6 +90,21 @@ impl BeaconNodeClient {
             .await
     }
 
+    /// `GET beacon/states/{state_id}/validators/{validator_id}`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_states_validator_id(
+        &self,
+        state_id: StateId,
+        validator_id: &ValidatorId,
+    ) -> Result<Option<GenericResponse<ValidatorData>>, Error> {
+        self.get_opt(&format!(
+            "beacon/states/{}/validators/{}",
+            state_id, validator_id
+        ))
+        .await
+    }
+
     /// `GET beacon/blocks/{block_id}/root`
     ///
     /// Returns `Ok(None)` on a 404 error.

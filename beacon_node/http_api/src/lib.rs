@@ -4,7 +4,7 @@ mod state_id;
 
 use beacon_chain::{BeaconChain, BeaconChainTypes};
 use block_id::BlockId;
-use eth2::types as api_types;
+use eth2::types::{self as api_types, ValidatorId};
 use serde::Serialize;
 use state_id::StateId;
 use std::future::Future;
@@ -125,6 +125,61 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
+    // beacon/states/{state_id}/validators/{validator_id}
+    let beacon_state_validators_id = beacon_states_path
+        .clone()
+        .and(warp::path("validators"))
+        .and(warp::path::param::<ValidatorId>())
+        .and(warp::path::end())
+        .and_then(
+            |state_id: StateId, chain: Arc<BeaconChain<T>>, validator_id: ValidatorId| {
+                blocking_json_task(move || {
+                    state_id
+                        .map_state(&chain, |state| {
+                            let index_opt = match &validator_id {
+                                ValidatorId::PublicKey(pubkey) => {
+                                    state.validators.iter().position(|v| v.pubkey == *pubkey)
+                                }
+                                ValidatorId::Index(index) => Some(*index as usize),
+                            };
+
+                            index_opt
+                                .and_then(|index| {
+                                    state
+                                        .validators
+                                        .get(index)
+                                        .map(|validator| (index, validator))
+                                })
+                                .and_then(|(index, validator)| {
+                                    state
+                                        .balances
+                                        .get(index)
+                                        .map(|balance| (index, validator, *balance))
+                                })
+                                .map(|(index, validator, balance)| {
+                                    let epoch = state.current_epoch();
+                                    let finalized_epoch = state.finalized_checkpoint.epoch;
+                                    let far_future_epoch = chain.spec.far_future_epoch;
+
+                                    api_types::ValidatorData {
+                                        index: index as u64,
+                                        balance,
+                                        status: api_types::ValidatorStatus::from_validator(
+                                            Some(validator),
+                                            epoch,
+                                            finalized_epoch,
+                                            far_future_epoch,
+                                        ),
+                                        validator: validator.clone(),
+                                    }
+                                })
+                                .ok_or_else(|| warp::reject::not_found())
+                        })
+                        .map(api_types::GenericResponse::from)
+                })
+            },
+        );
+
     /*
      * beacon/blocks
      */
@@ -153,6 +208,7 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_state_fork)
         .or(beacon_state_finality_checkpoints)
         .or(beacon_state_validators)
+        .or(beacon_state_validators_id)
         .or(beacon_block_root);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
