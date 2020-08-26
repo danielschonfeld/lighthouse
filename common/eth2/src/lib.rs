@@ -1,7 +1,8 @@
 pub mod types;
 
-use self::types::{GenericResponse, RootData, StateId};
-use reqwest::Error;
+use self::types::{Fork, GenericResponse, RootData, StateId};
+use reqwest::{Error, StatusCode};
+use serde::de::DeserializeOwned;
 
 const VERSION: &str = "eth/v1";
 
@@ -22,19 +23,48 @@ impl BeaconNodeClient {
         Self { client, server }
     }
 
+    fn path(&self, path: &str) -> String {
+        format!("{}/{}/{}", self.server, VERSION, path)
+    }
+
+    async fn get_opt<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>, Error> {
+        match self
+            .client
+            .get(&self.path(path))
+            .send()
+            .await?
+            .error_for_status()
+        {
+            Ok(resp) => resp.json().await.map(Option::Some),
+            Err(err) => {
+                if err.status() == Some(StatusCode::NOT_FOUND) {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    /// `GET beacon/states/{state_id}/root`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
     pub async fn beacon_states_root(
         &self,
         state_id: StateId,
-    ) -> Result<GenericResponse<RootData>, Error> {
-        self.client
-            .get(&format!(
-                "{}/{}/beacon/states/{}/root",
-                self.server, VERSION, state_id
-            ))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
+    ) -> Result<Option<GenericResponse<RootData>>, Error> {
+        self.get_opt(&format!("beacon/states/{}/root", state_id))
+            .await
+    }
+
+    /// `GET beacon/states/{state_id}/fork`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_states_fork(
+        &self,
+        state_id: StateId,
+    ) -> Result<Option<GenericResponse<Fork>>, Error> {
+        self.get_opt(&format!("beacon/states/{}/fork", state_id))
             .await
     }
 }

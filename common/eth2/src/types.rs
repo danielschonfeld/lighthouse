@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use types::{Checkpoint, Hash256, Slot};
+
+pub use types::{Checkpoint, Fork, Hash256, Slot};
 
 #[derive(Debug, Copy, Clone)]
 pub enum BlockId {
@@ -24,7 +25,7 @@ impl FromStr for BlockId {
             "justified" => Ok(BlockId::Justified),
             other => {
                 if other.starts_with("0x") {
-                    Hash256::from_str(s)
+                    Hash256::from_str(&s[2..])
                         .map(BlockId::Root)
                         .map_err(|e| format!("{} cannot be parsed as a root", e))
                 } else {
@@ -34,6 +35,19 @@ impl FromStr for BlockId {
                         .map_err(|_| format!("{} cannot be parsed as a parameter", s))
                 }
             }
+        }
+    }
+}
+
+impl fmt::Display for BlockId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockId::Head => write!(f, "head"),
+            BlockId::Genesis => write!(f, "genesis"),
+            BlockId::Finalized => write!(f, "finalized"),
+            BlockId::Justified => write!(f, "justified"),
+            BlockId::Slot(slot) => write!(f, "{}", slot),
+            BlockId::Root(root) => write!(f, "{:?}", root),
         }
     }
 }
@@ -59,7 +73,7 @@ impl FromStr for StateId {
             "justified" => Ok(StateId::Justified),
             other => {
                 if other.starts_with("0x") {
-                    Hash256::from_str(s)
+                    Hash256::from_str(&s[2..])
                         .map(StateId::Root)
                         .map_err(|e| format!("{} cannot be parsed as a root", e))
                 } else {
@@ -81,7 +95,7 @@ impl fmt::Display for StateId {
             StateId::Finalized => write!(f, "finalized"),
             StateId::Justified => write!(f, "justified"),
             StateId::Slot(slot) => write!(f, "{}", slot),
-            StateId::Root(root) => write!(f, "0x{}", root),
+            StateId::Root(root) => write!(f, "{:?}", root),
         }
     }
 }

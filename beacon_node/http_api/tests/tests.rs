@@ -7,7 +7,7 @@ use http_api::Context;
 use std::sync::Arc;
 use store::config::StoreConfig;
 use tokio::sync::oneshot;
-use types::{test_utils::generate_deterministic_keypairs, EthSpec, MainnetEthSpec, Slot};
+use types::{test_utils::generate_deterministic_keypairs, EthSpec, Hash256, MainnetEthSpec, Slot};
 
 type E = MainnetEthSpec;
 
@@ -97,71 +97,154 @@ impl ApiTester {
         }
     }
 
-    pub async fn test_beacon_state_root(self, state_id: StateId) -> Self {
-        let result = self.client.beacon_states_root(state_id).await.unwrap();
+    pub async fn test_beacon_state_root(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let result = self
+                .client
+                .beacon_states_root(state_id)
+                .await
+                .unwrap()
+                .map(|res| res.data.root);
 
-        let expected = match state_id {
-            StateId::Head => self.chain.head_info().unwrap().state_root,
-            StateId::Genesis => self.chain.genesis_state_root,
-            StateId::Finalized => {
-                let finalized_slot = self
+            let expected = match state_id {
+                StateId::Head => Some(self.chain.head_info().unwrap().state_root),
+                StateId::Genesis => Some(self.chain.genesis_state_root),
+                StateId::Finalized => {
+                    let finalized_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .finalized_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
+
+                    self.chain.state_root_at_slot(finalized_slot).unwrap()
+                }
+                StateId::Justified => {
+                    let justified_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .current_justified_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
+
+                    self.chain.state_root_at_slot(justified_slot).unwrap()
+                }
+                StateId::Slot(slot) => self.chain.state_root_at_slot(slot).unwrap(),
+                StateId::Root(root) => Some(root),
+            };
+
+            assert_eq!(result, expected, "{:?}", state_id);
+        }
+
+        self
+    }
+
+    pub async fn test_beacon_state_fork(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let result = self
+                .client
+                .beacon_states_fork(state_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let expected = match state_id {
+                StateId::Head => Some(self.chain.head_info().unwrap().fork),
+                StateId::Genesis => self
                     .chain
-                    .head_info()
+                    .get_state(&self.chain.genesis_state_root, None)
                     .unwrap()
-                    .finalized_checkpoint
-                    .epoch
-                    .start_slot(E::slots_per_epoch());
+                    .map(|state| state.fork),
+                StateId::Finalized => {
+                    let finalized_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .finalized_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
 
-                self.chain
-                    .state_root_at_slot(finalized_slot)
-                    .unwrap()
-                    .unwrap()
-            }
-            StateId::Justified => {
-                let justified_slot = self
+                    let root = self
+                        .chain
+                        .state_root_at_slot(finalized_slot)
+                        .unwrap()
+                        .unwrap();
+
+                    self.chain
+                        .get_state(&root, Some(finalized_slot))
+                        .unwrap()
+                        .map(|state| state.fork)
+                }
+                StateId::Justified => {
+                    let justified_slot = self
+                        .chain
+                        .head_info()
+                        .unwrap()
+                        .current_justified_checkpoint
+                        .epoch
+                        .start_slot(E::slots_per_epoch());
+
+                    let root = self
+                        .chain
+                        .state_root_at_slot(justified_slot)
+                        .unwrap()
+                        .unwrap();
+
+                    self.chain
+                        .get_state(&root, Some(justified_slot))
+                        .unwrap()
+                        .map(|state| state.fork)
+                }
+                StateId::Slot(slot) => {
+                    let root = self.chain.state_root_at_slot(slot).unwrap().unwrap();
+
+                    self.chain
+                        .get_state(&root, Some(slot))
+                        .unwrap()
+                        .map(|state| state.fork)
+                }
+                StateId::Root(root) => self
                     .chain
-                    .head_info()
+                    .get_state(&root, None)
                     .unwrap()
-                    .current_justified_checkpoint
-                    .epoch
-                    .start_slot(E::slots_per_epoch());
+                    .map(|state| state.fork),
+            };
 
-                self.chain
-                    .state_root_at_slot(justified_slot)
-                    .unwrap()
-                    .unwrap()
-            }
-            StateId::Slot(slot) => self.chain.state_root_at_slot(slot).unwrap().unwrap(),
-            StateId::Root(root) => root,
-        };
-
-        assert_eq!(result.data.root, expected, "{:?}", state_id);
+            assert_eq!(result, expected, "{:?}", state_id);
+        }
 
         self
     }
 }
 
+fn interesting_state_ids() -> Vec<StateId> {
+    vec![
+        StateId::Head,
+        StateId::Genesis,
+        StateId::Finalized,
+        StateId::Justified,
+        StateId::Slot(Slot::new(0)),
+        StateId::Slot(Slot::new(32)),
+        StateId::Slot(Slot::from(SKIPPED_SLOTS[0])),
+        StateId::Slot(Slot::from(SKIPPED_SLOTS[1])),
+        StateId::Slot(Slot::from(SKIPPED_SLOTS[2])),
+        StateId::Slot(Slot::from(SKIPPED_SLOTS[3])),
+        StateId::Root(Hash256::zero()),
+    ]
+}
+
 #[tokio::test(core_threads = 2)]
 async fn beacon_state_root() {
     ApiTester::new()
-        .test_beacon_state_root(StateId::Head)
-        .await
-        .test_beacon_state_root(StateId::Genesis)
-        .await
-        .test_beacon_state_root(StateId::Finalized)
-        .await
-        .test_beacon_state_root(StateId::Justified)
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::new(0)))
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::new(32)))
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[0])))
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[1])))
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[2])))
-        .await
-        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[3])))
+        .test_beacon_state_root(&interesting_state_ids())
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_state_fork() {
+    ApiTester::new()
+        .test_beacon_state_fork(&interesting_state_ids())
         .await;
 }
