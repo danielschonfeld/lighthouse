@@ -4,10 +4,6 @@ use serde_derive::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::Path;
 use tree_hash::TreeHash;
-use utils::{
-    fork_from_hex_str, fork_to_hex_str, u32_from_hex_str, u32_to_hex_str, u8_from_hex_str,
-    u8_to_hex_str,
-};
 
 /// Each of the BLS signature domains.
 ///
@@ -64,12 +60,9 @@ pub struct ChainSpec {
     /*
      * Initial Values
      */
-    #[serde(
-        serialize_with = "fork_to_hex_str",
-        deserialize_with = "fork_from_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::fork_bytes_4")]
     pub genesis_fork_version: [u8; 4],
-    #[serde(deserialize_with = "u8_from_hex_str", serialize_with = "u8_to_hex_str")]
+    #[serde(with = "crate::serde_utils::u8_hex")]
     pub bls_withdrawal_prefix_byte: u8,
 
     /*
@@ -468,12 +461,9 @@ pub struct YamlConfig {
     hysteresis_downward_multiplier: u64,
     hysteresis_upward_multiplier: u64,
     genesis_slot: u64,
-    #[serde(
-        serialize_with = "fork_to_hex_str",
-        deserialize_with = "fork_from_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::fork_bytes_4")]
     genesis_fork_version: [u8; 4],
-    #[serde(deserialize_with = "u8_from_hex_str", serialize_with = "u8_to_hex_str")]
+    #[serde(with = "crate::serde_utils::u8_hex")]
     bls_withdrawal_prefix: u8,
     seconds_per_slot: u64,
     min_attestation_inclusion_delay: u64,
@@ -489,45 +479,21 @@ pub struct YamlConfig {
     min_slashing_penalty_quotient: u64,
     safe_slots_to_update_justified: u64,
 
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_beacon_proposer: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_beacon_attester: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_randao: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_deposit: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_voluntary_exit: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_selection_proof: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     domain_aggregate_and_proof: u32,
-    #[serde(
-        deserialize_with = "u32_from_hex_str",
-        serialize_with = "u32_to_hex_str"
-    )]
+    #[serde(with = "crate::serde_utils::u32_hex")]
     // EthSpec
     justification_bits_length: u32,
     max_validators_per_committee: u32,

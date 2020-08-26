@@ -14,6 +14,7 @@ use tree_hash_derive::TreeHash;
 pub struct Validator {
     pub pubkey: PublicKeyBytes,
     pub withdrawal_credentials: Hash256,
+    #[serde(with = "crate::serde_utils::quoted")]
     pub effective_balance: u64,
     pub slashed: bool,
     pub activation_eligibility_epoch: Epoch,

@@ -294,7 +294,7 @@ macro_rules! impl_serde {
                 D: serde::de::Deserializer<'de>,
             {
                 deserializer
-                    .deserialize_any(serde_utils::quoted::QuotedIntVisitor)
+                    .deserialize_any(crate::serde_utils::quoted::QuotedIntVisitor)
                     .map($type::from)
             }
         }

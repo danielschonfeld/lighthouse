@@ -1,8 +1,11 @@
+mod validator_status;
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
 pub use types::{Checkpoint, Fork, Hash256, Slot};
+pub use validator_status::{ValidatorData, ValidatorStatus};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BlockId {

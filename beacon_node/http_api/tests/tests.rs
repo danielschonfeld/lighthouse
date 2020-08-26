@@ -234,6 +234,47 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_beacon_states_validators(self, state_ids: &[StateId]) -> Self {
+        for &state_id in state_ids {
+            let result = self
+                .client
+                .beacon_states_validators(state_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let expected = self.get_state(state_id).map(|state| {
+                let epoch = state.current_epoch();
+                let finalized_epoch = state.finalized_checkpoint.epoch;
+                let far_future_epoch = self.chain.spec.far_future_epoch;
+
+                let mut validators = Vec::with_capacity(state.validators.len());
+
+                for i in 0..state.validators.len() {
+                    let validator = state.validators[i].clone();
+
+                    validators.push(ValidatorData {
+                        index: i as u64,
+                        balance: state.balances[i],
+                        status: ValidatorStatus::from_validator(
+                            Some(&validator),
+                            epoch,
+                            finalized_epoch,
+                            far_future_epoch,
+                        ),
+                        validator,
+                    })
+                }
+
+                validators
+            });
+
+            assert_eq!(result, expected, "{:?}", state_id);
+        }
+
+        self
+    }
+
     fn get_block_root(&self, block_id: BlockId) -> Option<Hash256> {
         match block_id {
             BlockId::Head => Some(self.chain.head_info().unwrap().block_root),
@@ -319,6 +360,13 @@ async fn beacon_states_fork() {
 async fn beacon_states_finality_checkpoints() {
     ApiTester::new()
         .test_beacon_states_finality_checkpoints(&interesting_state_ids())
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_states_finality_validators() {
+    ApiTester::new()
+        .test_beacon_states_validators(&interesting_state_ids())
         .await;
 }
 
