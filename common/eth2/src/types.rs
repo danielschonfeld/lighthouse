@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 pub use types::{Checkpoint, Fork, Hash256, Slot};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BlockId {
     Head,
     Genesis,
@@ -52,7 +52,7 @@ impl fmt::Display for BlockId {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum StateId {
     Head,
     Genesis,
@@ -112,7 +112,7 @@ impl<T: Serialize + serde::de::DeserializeOwned> From<T> for GenericResponse<T> 
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RootData {
     pub root: Hash256,
 }
@@ -123,7 +123,7 @@ impl From<Hash256> for RootData {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FinalityCheckpointsData {
     pub previous_justified: Checkpoint,
     pub current_justified: Checkpoint,

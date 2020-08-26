@@ -1,6 +1,6 @@
 pub mod types;
 
-use self::types::{Fork, GenericResponse, RootData, StateId};
+use self::types::*;
 use reqwest::{Error, StatusCode};
 use serde::de::DeserializeOwned;
 
@@ -65,6 +65,17 @@ impl BeaconNodeClient {
         state_id: StateId,
     ) -> Result<Option<GenericResponse<Fork>>, Error> {
         self.get_opt(&format!("beacon/states/{}/fork", state_id))
+            .await
+    }
+
+    /// `GET beacon/states/{state_id}/finality_checkpoints`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_states_finality_checkpoints(
+        &self,
+        state_id: StateId,
+    ) -> Result<Option<GenericResponse<FinalityCheckpointsData>>, Error> {
+        self.get_opt(&format!("beacon/states/{}/finality_checkpoints", state_id))
             .await
     }
 }
