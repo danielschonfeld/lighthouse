@@ -7,7 +7,10 @@ use block_id::BlockId;
 use eth2::types as api_types;
 use serde::Serialize;
 use state_id::StateId;
+use std::future::Future;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::sync::oneshot;
 use warp::Filter;
 
 const API_PREFIX: &str = "eth";
@@ -15,9 +18,16 @@ const API_VERSION: &str = "v1";
 
 pub struct Context<T: BeaconChainTypes> {
     pub chain: Option<Arc<BeaconChain<T>>>,
+    pub listen_address: [u8; 4],
+    pub listen_port: u16,
 }
 
-pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
+pub fn serve<T: BeaconChainTypes>(
+    ctx: Arc<Context<T>>,
+) -> Result<(SocketAddr, impl Future<Output = ()>, oneshot::Sender<()>), warp::Error> {
+    let listen_address = ctx.listen_address;
+    let listen_port = ctx.listen_port;
+
     let base_path = warp::path(API_PREFIX).and(warp::path(API_VERSION));
     let chain_filter = warp::any()
         .map(move || ctx.chain.clone())
@@ -105,7 +115,15 @@ pub async fn serve<T: BeaconChainTypes>(ctx: Arc<Context<T>>) {
         .or(beacon_state_finality_checkpoints)
         .or(beacon_block_root);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(
+        (listen_address, listen_port),
+        async {
+            shutdown_rx.await.ok();
+        },
+    )?;
+
+    Ok((listening_socket, server, shutdown_tx))
 }
 
 async fn blocking_task<F, T>(func: F) -> T

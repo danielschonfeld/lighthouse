@@ -37,19 +37,15 @@ impl BlockId {
         &self,
         chain: &BeaconChain<T>,
     ) -> Result<SignedBeaconBlock<T::EthSpec>, warp::Rejection> {
-        let block_root = match &self.0 {
-            CoreBlockId::Head => {
-                return chain
-                    .head_beacon_block()
-                    .map_err(crate::reject::beacon_chain_error)
-            }
-            _ => self.root(chain),
-        }?;
-
-        chain
-            .get_block(&block_root)
-            .map_err(crate::reject::beacon_chain_error)
-            .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found()))
+        match &self.0 {
+            CoreBlockId::Head => chain
+                .head_beacon_block()
+                .map_err(crate::reject::beacon_chain_error),
+            _ => chain
+                .get_block(&self.root(chain)?)
+                .map_err(crate::reject::beacon_chain_error)
+                .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found())),
+        }
     }
 }
 

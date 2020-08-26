@@ -63,16 +63,14 @@ impl StateId {
     where
         F: Fn(&BeaconState<T::EthSpec>) -> Result<U, warp::Rejection>,
     {
-        let state = match &self.0 {
+        match &self.0 {
             CoreStateId::Head => {
                 return chain
                     .map_head(|snapshot| func(&snapshot.beacon_state))
                     .map_err(crate::reject::beacon_chain_error)?
             }
-            _ => self.state(chain)?,
-        };
-
-        func(&state)
+            _ => func(&self.state(chain)?),
+        }
     }
 }
 

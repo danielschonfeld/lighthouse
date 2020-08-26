@@ -10,4 +10,4 @@ edition = "2018"
 serde = { version = "1.0.110", features = ["derive"] }
 types = { path = "../../consensus/types" }
 hex = "0.4.2"
-reqwest = "0.10.7"
+reqwest = { version = "0.10.8", features = ["json"] }

@@ -3,7 +3,7 @@ use std::fmt;
 use std::str::FromStr;
 use types::{Checkpoint, Hash256, Slot};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum BlockId {
     Head,
     Genesis,
@@ -38,7 +38,7 @@ impl FromStr for BlockId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum StateId {
     Head,
     Genesis,
