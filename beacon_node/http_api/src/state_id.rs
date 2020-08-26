@@ -1,8 +1,7 @@
-use crate::BlockId;
 use beacon_chain::{BeaconChain, BeaconChainTypes};
-use eth2::types::{BlockId as CoreBlockId, StateId as CoreStateId};
+use eth2::types::StateId as CoreStateId;
 use std::str::FromStr;
-use types::{BeaconState, Fork, Hash256};
+use types::{BeaconState, EthSpec, Fork, Hash256};
 
 pub struct StateId(CoreStateId);
 
@@ -11,7 +10,7 @@ impl StateId {
         &self,
         chain: &BeaconChain<T>,
     ) -> Result<Hash256, warp::Rejection> {
-        let block = match &self.0 {
+        let slot = match &self.0 {
             CoreStateId::Head => {
                 return chain
                     .head_info()
@@ -19,13 +18,25 @@ impl StateId {
                     .map_err(crate::reject::beacon_chain_error)
             }
             CoreStateId::Genesis => return Ok(chain.genesis_state_root),
-            CoreStateId::Finalized => BlockId(CoreBlockId::Finalized).block(chain),
-            CoreStateId::Justified => BlockId(CoreBlockId::Justified).block(chain),
-            CoreStateId::Slot(slot) => BlockId(CoreBlockId::Slot(*slot)).block(chain),
+            CoreStateId::Finalized => chain.head_info().map(|head| {
+                head.finalized_checkpoint
+                    .epoch
+                    .start_slot(T::EthSpec::slots_per_epoch())
+            }),
+            CoreStateId::Justified => chain.head_info().map(|head| {
+                head.current_justified_checkpoint
+                    .epoch
+                    .start_slot(T::EthSpec::slots_per_epoch())
+            }),
+            CoreStateId::Slot(slot) => Ok(*slot),
             CoreStateId::Root(root) => return Ok(*root),
-        }?;
+        }
+        .map_err(crate::reject::beacon_chain_error)?;
 
-        Ok(block.state_root())
+        chain
+            .state_root_at_slot(slot)
+            .map_err(crate::reject::beacon_chain_error)?
+            .ok_or_else(|| warp::reject::not_found())
     }
 
     pub fn fork<T: BeaconChainTypes>(

@@ -460,6 +460,18 @@ impl<T: BeaconChainTypes> BeaconChain<T> {
         }
     }
 
+    /// Returns the block at the given slot, if any. Only returns blocks in the canonical chain.
+    ///
+    /// ## Errors
+    ///
+    /// May return a database error.
+    pub fn state_root_at_slot(&self, slot: Slot) -> Result<Option<Hash256>, Error> {
+        process_results(self.rev_iter_state_roots()?, |mut iter| {
+            iter.find(|(_, this_slot)| *this_slot == slot)
+                .map(|(root, _)| root)
+        })
+    }
+
     /// Returns the block root at the given slot, if any. Only returns roots in the canonical chain.
     ///
     /// ## Errors

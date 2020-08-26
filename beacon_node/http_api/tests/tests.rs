@@ -7,13 +7,28 @@ use http_api::Context;
 use std::sync::Arc;
 use store::config::StoreConfig;
 use tokio::sync::oneshot;
-use types::{test_utils::generate_deterministic_keypairs, MainnetEthSpec};
+use types::{test_utils::generate_deterministic_keypairs, EthSpec, MainnetEthSpec, Slot};
+
+type E = MainnetEthSpec;
 
 const VALIDATOR_COUNT: usize = 24;
-const CHAIN_LENGTH: usize = 32 * 6;
+const SLOTS_PER_EPOCH: u64 = 32;
+const CHAIN_LENGTH: u64 = SLOTS_PER_EPOCH * 5;
+const JUSTIFIED_EPOCH: u64 = 4;
+const FINALIZED_EPOCH: u64 = 3;
+
+/// Skipping the slots around the epoch boundary allows us to check that we're obtaining states
+/// from skipped slots for the finalized and justified checkpoints (instead of the state from the
+/// block that those roots point to).
+const SKIPPED_SLOTS: &[u64] = &[
+    JUSTIFIED_EPOCH * SLOTS_PER_EPOCH - 1,
+    JUSTIFIED_EPOCH * SLOTS_PER_EPOCH,
+    FINALIZED_EPOCH * SLOTS_PER_EPOCH - 1,
+    FINALIZED_EPOCH * SLOTS_PER_EPOCH,
+];
 
 pub struct ApiTester {
-    chain: Arc<BeaconChain<HarnessType<MainnetEthSpec>>>,
+    chain: Arc<BeaconChain<HarnessType<E>>>,
     client: BeaconNodeClient,
     _server_shutdown: oneshot::Sender<()>,
 }
@@ -28,13 +43,36 @@ impl ApiTester {
 
         harness.advance_slot();
 
-        harness.extend_chain(
-            CHAIN_LENGTH,
-            BlockStrategy::OnCanonicalHead,
-            AttestationStrategy::AllValidators,
-        );
+        for _ in 0..CHAIN_LENGTH {
+            let slot = harness.chain.slot().unwrap().as_u64();
+
+            if !SKIPPED_SLOTS.contains(&slot) {
+                harness.extend_chain(
+                    1,
+                    BlockStrategy::OnCanonicalHead,
+                    AttestationStrategy::AllValidators,
+                );
+            }
+
+            harness.advance_slot();
+        }
 
         let chain = Arc::new(harness.chain);
+
+        assert_eq!(
+            chain.head_info().unwrap().finalized_checkpoint.epoch,
+            3,
+            "precondition: finality"
+        );
+        assert_eq!(
+            chain
+                .head_info()
+                .unwrap()
+                .current_justified_checkpoint
+                .epoch,
+            4,
+            "precondition: justification"
+        );
 
         let context = Arc::new(Context {
             chain: Some(chain.clone()),
@@ -43,7 +81,7 @@ impl ApiTester {
         });
         let ctx = context.clone();
         let (listening_socket, server, server_shutdown) = http_api::serve(ctx).unwrap();
-        dbg!(listening_socket);
+
         tokio::spawn(async { server.await });
 
         let client = BeaconNodeClient::new(format!(
@@ -64,16 +102,66 @@ impl ApiTester {
 
         let expected = match state_id {
             StateId::Head => self.chain.head_info().unwrap().state_root,
-            _ => todo!(),
+            StateId::Genesis => self.chain.genesis_state_root,
+            StateId::Finalized => {
+                let finalized_slot = self
+                    .chain
+                    .head_info()
+                    .unwrap()
+                    .finalized_checkpoint
+                    .epoch
+                    .start_slot(E::slots_per_epoch());
+
+                self.chain
+                    .state_root_at_slot(finalized_slot)
+                    .unwrap()
+                    .unwrap()
+            }
+            StateId::Justified => {
+                let justified_slot = self
+                    .chain
+                    .head_info()
+                    .unwrap()
+                    .current_justified_checkpoint
+                    .epoch
+                    .start_slot(E::slots_per_epoch());
+
+                self.chain
+                    .state_root_at_slot(justified_slot)
+                    .unwrap()
+                    .unwrap()
+            }
+            StateId::Slot(slot) => self.chain.state_root_at_slot(slot).unwrap().unwrap(),
+            StateId::Root(root) => root,
         };
 
-        assert_eq!(result.data.root, expected);
+        assert_eq!(result.data.root, expected, "{:?}", state_id);
 
         self
     }
 }
 
 #[tokio::test(core_threads = 2)]
-async fn my_test() {
-    ApiTester::new().test_beacon_state_root(StateId::Head).await;
+async fn beacon_state_root() {
+    ApiTester::new()
+        .test_beacon_state_root(StateId::Head)
+        .await
+        .test_beacon_state_root(StateId::Genesis)
+        .await
+        .test_beacon_state_root(StateId::Finalized)
+        .await
+        .test_beacon_state_root(StateId::Justified)
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::new(0)))
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::new(32)))
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[0])))
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[1])))
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[2])))
+        .await
+        .test_beacon_state_root(StateId::Slot(Slot::from(SKIPPED_SLOTS[3])))
+        .await;
 }
