@@ -145,23 +145,13 @@ pub fn serve<T: BeaconChainTypes>(
 
                             index_opt
                                 .and_then(|index| {
-                                    state
-                                        .validators
-                                        .get(index)
-                                        .map(|validator| (index, validator))
-                                })
-                                .and_then(|(index, validator)| {
-                                    state
-                                        .balances
-                                        .get(index)
-                                        .map(|balance| (index, validator, *balance))
-                                })
-                                .map(|(index, validator, balance)| {
+                                    let validator = state.validators.get(index)?;
+                                    let balance = *state.balances.get(index)?;
                                     let epoch = state.current_epoch();
                                     let finalized_epoch = state.finalized_checkpoint.epoch;
                                     let far_future_epoch = chain.spec.far_future_epoch;
 
-                                    api_types::ValidatorData {
+                                    Some(api_types::ValidatorData {
                                         index: index as u64,
                                         balance,
                                         status: api_types::ValidatorStatus::from_validator(
@@ -171,7 +161,7 @@ pub fn serve<T: BeaconChainTypes>(
                                             far_future_epoch,
                                         ),
                                         validator: validator.clone(),
-                                    }
+                                    })
                                 })
                                 .ok_or_else(|| warp::reject::not_found())
                         })
