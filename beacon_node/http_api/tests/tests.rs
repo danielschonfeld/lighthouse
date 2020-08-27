@@ -333,18 +333,11 @@ impl ApiTester {
                         .unwrap()
                         .map(|res| res.data);
 
-                    let state = if let Some(state) = state_opt.as_ref() {
-                        state
-                    } else {
-                        if result.is_none() {
-                            continue;
-                        } else {
-                            panic!(
-                                "should have returned none: {:?}, {:?}",
-                                state_id, validator_id
-                            )
-                        }
-                    };
+                    if result.is_none() && state_opt.is_none() {
+                        continue;
+                    }
+
+                    let state = state_opt.as_ref().expect("result should be none");
 
                     let expected = {
                         let epoch = state.current_epoch();

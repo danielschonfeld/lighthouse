@@ -144,7 +144,7 @@ impl FromStr for ValidatorId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with("0x") {
-            serde_json::from_str(s)
+            serde_json::from_str(&format!("\"{}\"", s))
                 .map(ValidatorId::PublicKey)
                 .map_err(|_| format!("{} cannot be parsed as a public key", s))
         } else {
