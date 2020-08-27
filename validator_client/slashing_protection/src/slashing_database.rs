@@ -177,7 +177,13 @@ impl SlashingDatabase {
     ///
     /// This is NOT the same as a validator index, and depends on the ordering that validators
     /// are registered with the slashing protection database (and may vary between machines).
-    fn get_validator_id(txn: &Transaction, public_key: &PublicKey) -> Result<i64, NotSafe> {
+    pub fn get_validator_id(&self, public_key: &PublicKey) -> Result<i64, NotSafe> {
+        let mut conn = self.conn_pool.get()?;
+        let txn = conn.transaction()?;
+        Self::get_validator_id_in_txn(&txn, public_key)
+    }
+
+    fn get_validator_id_in_txn(txn: &Transaction, public_key: &PublicKey) -> Result<i64, NotSafe> {
         Self::get_validator_id_opt(txn, public_key)?
             .ok_or_else(|| NotSafe::UnregisteredValidator(public_key.clone()))
     }
@@ -204,7 +210,7 @@ impl SlashingDatabase {
         slot: Slot,
         signing_root: Hash256,
     ) -> Result<Safe, NotSafe> {
-        let validator_id = Self::get_validator_id(txn, validator_pubkey)?;
+        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
         let existing_block = txn
             .prepare(
@@ -247,7 +253,7 @@ impl SlashingDatabase {
             ));
         }
 
-        let validator_id = Self::get_validator_id(txn, validator_pubkey)?;
+        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
         // 1. Check for a double vote. Namely, an existing attestation with the same target epoch,
         //    and a different signing root.
@@ -335,7 +341,7 @@ impl SlashingDatabase {
         slot: Slot,
         signing_root: Hash256,
     ) -> Result<(), NotSafe> {
-        let validator_id = Self::get_validator_id(txn, validator_pubkey)?;
+        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
         txn.execute(
             "INSERT INTO signed_blocks (validator_id, slot, signing_root)
@@ -357,7 +363,7 @@ impl SlashingDatabase {
         att_target_epoch: Epoch,
         att_signing_root: Hash256,
     ) -> Result<(), NotSafe> {
-        let validator_id = Self::get_validator_id(txn, validator_pubkey)?;
+        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
         txn.execute(
             "INSERT INTO signed_attestations (validator_id, source_epoch, target_epoch, signing_root)
@@ -552,7 +558,7 @@ impl SlashingDatabase {
             BTreeMap::new();
 
         txn.prepare(
-            "SELECT validator_pubkey, slot, signing_root
+            "SELECT public_key, slot, signing_root
              FROM signed_blocks, validators
              WHERE signed_blocks.validator_id = validators.id",
         )?
@@ -569,7 +575,7 @@ impl SlashingDatabase {
         })?;
 
         txn.prepare(
-            "SELECT validator_pubkey, source_epoch, target_epoch, signing_root
+            "SELECT public_key, source_epoch, target_epoch, signing_root
              FROM signed_attestations, validators
              WHERE signed_attestations.validator_id = validators.id",
         )?
@@ -610,8 +616,18 @@ impl SlashingDatabase {
 
         Ok(Interchange { metadata, data })
     }
+
+    pub fn num_validator_rows(&self) -> Result<u32, NotSafe> {
+        let mut conn = self.conn_pool.get()?;
+        let txn = conn.transaction()?;
+        let count = txn
+            .prepare("SELECT COALESCE(COUNT(*), 0) FROM validators")?
+            .query_row(params![], |row| row.get(0))?;
+        Ok(count)
+    }
 }
 
+#[derive(Debug)]
 pub enum InterchangeError {
     UnsupportedVersion(u16),
     GenesisValidatorsMismatch {

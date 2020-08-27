@@ -1,7 +1,9 @@
 mod attestation_tests;
 mod block_tests;
 mod interchange;
+mod interchange_tests;
 mod parallel_tests;
+mod registration_tests;
 mod signed_attestation;
 mod signed_block;
 mod slashing_database;

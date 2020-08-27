@@ -1,21 +1,23 @@
 use serde_derive::{Deserialize, Serialize};
 use types::{Epoch, Hash256, PublicKey, Slot};
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InterchangeFormat {
     Minimal,
     Complete,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct InterchangeMetadata {
     pub interchange_format: InterchangeFormat,
     pub interchange_format_version: u16,
     pub genesis_validators_root: Hash256,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct MinimalInterchangeData {
     pub pubkey: PublicKey,
     pub last_signed_block_slot: Slot,
@@ -23,27 +25,30 @@ pub struct MinimalInterchangeData {
     pub last_signed_attestation_target_epoch: Epoch,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CompleteInterchangeData {
     pub pubkey: PublicKey,
     pub signed_blocks: Vec<SignedBlock>,
     pub signed_attestations: Vec<SignedAttestation>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SignedBlock {
     pub slot: Slot,
     pub signing_root: Option<Hash256>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SignedAttestation {
     pub source_epoch: Epoch,
     pub target_epoch: Epoch,
     pub signing_root: Option<Hash256>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum InterchangeData {
@@ -52,13 +57,14 @@ pub enum InterchangeData {
 }
 
 /// Temporary struct used during parsing.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PreInterchange {
     metadata: InterchangeMetadata,
     data: serde_json::Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Interchange {
     pub metadata: InterchangeMetadata,
     pub data: InterchangeData,
