@@ -3,6 +3,7 @@ mod validator_status;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use types::serde_utils;
 
 pub use types::{Checkpoint, Fork, Hash256, PublicKeyBytes, Slot};
 pub use validator_status::{ValidatorData, ValidatorStatus};
@@ -163,3 +164,21 @@ impl fmt::Display for ValidatorId {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommitteeData {
+    #[serde(with = "serde_utils::quoted")]
+    pub index: u64,
+    pub slot: Slot,
+    #[serde(with = "serde_utils::quoted_u64_vec")]
+    pub validators: Vec<u64>,
+}
+
+/*
+QuotedItem<T>(T);
+
+impl<T: Serialize> fmt::Display for QuotedVec<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    }
+}
+*/

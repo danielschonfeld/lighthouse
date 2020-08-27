@@ -278,10 +278,7 @@ pub mod quoted {
         type Value = u64;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            write!(
-                formatter,
-                "a string containing digits or an int fitting into u64"
-            )
+            write!(formatter, "a quoted or unquoted integer")
         }
 
         fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
@@ -309,5 +306,59 @@ pub mod quoted {
         D: Deserializer<'de>,
     {
         deserializer.deserialize_any(QuotedIntVisitor)
+    }
+}
+
+pub mod quoted_u64_vec {
+    use super::*;
+    use serde::ser::SerializeSeq;
+    use serde_derive::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(transparent)]
+    pub struct QuotedIntWrapper {
+        #[serde(with = "super::quoted")]
+        int: u64,
+    }
+
+    pub struct QuotedIntVecVisitor;
+    impl<'a> serde::de::Visitor<'a> for QuotedIntVecVisitor {
+        type Value = Vec<u64>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(formatter, "a list of quoted or unquoted integers")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'a>,
+        {
+            let mut vec = vec![];
+
+            while let Some(val) = seq.next_element()? {
+                let val: QuotedIntWrapper = val;
+                vec.push(val.int);
+            }
+
+            Ok(vec)
+        }
+    }
+
+    pub fn serialize<S>(value: &Vec<u64>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(value.len()))?;
+        for &int in value {
+            seq.serialize_element(&QuotedIntWrapper { int })?;
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u64>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(QuotedIntVecVisitor)
     }
 }
