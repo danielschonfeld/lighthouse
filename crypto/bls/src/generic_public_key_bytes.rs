@@ -132,6 +132,14 @@ impl<Pub> TreeHash for GenericPublicKeyBytes<Pub> {
     impl_tree_hash!(PUBLIC_KEY_BYTES_LEN);
 }
 
+impl<Pub> fmt::Display for GenericPublicKeyBytes<Pub> {
+    impl_display!();
+}
+
+impl<Pub> std::str::FromStr for GenericPublicKeyBytes<Pub> {
+    impl_from_str!();
+}
+
 impl<Pub> Serialize for GenericPublicKeyBytes<Pub> {
     impl_serde_serialize!();
 }

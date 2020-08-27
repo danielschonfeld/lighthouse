@@ -97,6 +97,14 @@ impl<Pub: TPublicKey> TreeHash for GenericPublicKey<Pub> {
     impl_tree_hash!(PUBLIC_KEY_BYTES_LEN);
 }
 
+impl<Pub: TPublicKey> fmt::Display for GenericPublicKey<Pub> {
+    impl_display!();
+}
+
+impl<Pub: TPublicKey> std::str::FromStr for GenericPublicKey<Pub> {
+    impl_from_str!();
+}
+
 impl<Pub: TPublicKey> Serialize for GenericPublicKey<Pub> {
     impl_serde_serialize!();
 }

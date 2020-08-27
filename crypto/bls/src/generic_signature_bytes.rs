@@ -124,6 +124,14 @@ impl<Pub, Sig> TreeHash for GenericSignatureBytes<Pub, Sig> {
     impl_tree_hash!(SIGNATURE_BYTES_LEN);
 }
 
+impl<Pub, Sig> fmt::Display for GenericSignatureBytes<Pub, Sig> {
+    impl_display!();
+}
+
+impl<Pub, Sig> std::str::FromStr for GenericSignatureBytes<Pub, Sig> {
+    impl_from_str!();
+}
+
 impl<Pub, Sig> Serialize for GenericSignatureBytes<Pub, Sig> {
     impl_serde_serialize!();
 }

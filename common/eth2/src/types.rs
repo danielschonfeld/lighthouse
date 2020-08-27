@@ -144,13 +144,13 @@ impl FromStr for ValidatorId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with("0x") {
-            serde_json::from_str(&format!("\"{}\"", s))
+            PublicKeyBytes::from_str(s)
                 .map(ValidatorId::PublicKey)
-                .map_err(|_| format!("{} cannot be parsed as a public key", s))
+                .map_err(|e| format!("{} cannot be parsed as a public key: {}", s, e))
         } else {
             u64::from_str(s)
                 .map(ValidatorId::Index)
-                .map_err(|_| format!("{} cannot be parsed as a slot", s))
+                .map_err(|e| format!("{} cannot be parsed as a slot: {}", s, e))
         }
     }
 }

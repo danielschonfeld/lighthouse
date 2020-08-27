@@ -76,6 +76,35 @@ macro_rules! impl_ssz_decode {
     };
 }
 
+/// Contains the functions required for a `fmt::Display` implementation.
+///
+/// Does not include the `Impl` section since it gets very complicated when it comes to generics.
+macro_rules! impl_display {
+    () => {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", hex_encode(self.serialize().to_vec()))
+        }
+    };
+}
+
+/// Contains the functions required for a `fmt::Display` implementation.
+///
+/// Does not include the `Impl` section since it gets very complicated when it comes to generics.
+macro_rules! impl_from_str {
+    () => {
+        type Err = String;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            if s.starts_with("0x") {
+                let bytes = hex::decode(&s[2..]).map_err(|e| e.to_string())?;
+                Self::deserialize(&bytes[..]).map_err(|e| format!("{:?}", e))
+            } else {
+                Err("must start with 0x".to_string())
+            }
+        }
+    };
+}
+
 /// Contains the functions required for a `serde::Serialize` implementation.
 ///
 /// Does not include the `Impl` section since it gets very complicated when it comes to generics.
@@ -85,7 +114,7 @@ macro_rules! impl_serde_serialize {
         where
             S: Serializer,
         {
-            serializer.serialize_str(&hex_encode(self.serialize().to_vec()))
+            serializer.serialize_str(&self.to_string())
         }
     };
 }

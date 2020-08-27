@@ -149,6 +149,14 @@ impl<PublicKey, T: TSignature<PublicKey>> TreeHash for GenericSignature<PublicKe
     impl_tree_hash!(SIGNATURE_BYTES_LEN);
 }
 
+impl<PublicKey, T: TSignature<PublicKey>> fmt::Display for GenericSignature<PublicKey, T> {
+    impl_display!();
+}
+
+impl<PublicKey, T: TSignature<PublicKey>> std::str::FromStr for GenericSignature<PublicKey, T> {
+    impl_from_str!();
+}
+
 impl<PublicKey, T: TSignature<PublicKey>> Serialize for GenericSignature<PublicKey, T> {
     impl_serde_serialize!();
 }

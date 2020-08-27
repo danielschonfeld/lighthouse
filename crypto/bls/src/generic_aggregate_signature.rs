@@ -245,6 +245,23 @@ where
     impl_tree_hash!(SIGNATURE_BYTES_LEN);
 }
 
+impl<Pub, AggPub, Sig, AggSig> fmt::Display for GenericAggregateSignature<Pub, AggPub, Sig, AggSig>
+where
+    Sig: TSignature<Pub>,
+    AggSig: TAggregateSignature<Pub, AggPub, Sig>,
+{
+    impl_display!();
+}
+
+impl<Pub, AggPub, Sig, AggSig> std::str::FromStr
+    for GenericAggregateSignature<Pub, AggPub, Sig, AggSig>
+where
+    Sig: TSignature<Pub>,
+    AggSig: TAggregateSignature<Pub, AggPub, Sig>,
+{
+    impl_from_str!();
+}
+
 impl<Pub, AggPub, Sig, AggSig> Serialize for GenericAggregateSignature<Pub, AggPub, Sig, AggSig>
 where
     Sig: TSignature<Pub>,
