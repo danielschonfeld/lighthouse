@@ -100,6 +100,42 @@ impl ApiTester {
         }
     }
 
+    fn interesting_state_ids(&self) -> Vec<StateId> {
+        let mut ids = vec![
+            StateId::Head,
+            StateId::Genesis,
+            StateId::Finalized,
+            StateId::Justified,
+            StateId::Slot(Slot::new(0)),
+            StateId::Slot(Slot::new(32)),
+            StateId::Slot(Slot::from(SKIPPED_SLOTS[0])),
+            StateId::Slot(Slot::from(SKIPPED_SLOTS[1])),
+            StateId::Slot(Slot::from(SKIPPED_SLOTS[2])),
+            StateId::Slot(Slot::from(SKIPPED_SLOTS[3])),
+            StateId::Root(Hash256::zero()),
+        ];
+        ids.push(StateId::Root(self.chain.head_info().unwrap().state_root));
+        ids
+    }
+
+    fn interesting_block_ids(&self) -> Vec<BlockId> {
+        let mut ids = vec![
+            BlockId::Head,
+            BlockId::Genesis,
+            BlockId::Finalized,
+            BlockId::Justified,
+            BlockId::Slot(Slot::new(0)),
+            BlockId::Slot(Slot::new(32)),
+            BlockId::Slot(Slot::from(SKIPPED_SLOTS[0])),
+            BlockId::Slot(Slot::from(SKIPPED_SLOTS[1])),
+            BlockId::Slot(Slot::from(SKIPPED_SLOTS[2])),
+            BlockId::Slot(Slot::from(SKIPPED_SLOTS[3])),
+            BlockId::Root(Hash256::zero()),
+        ];
+        ids.push(BlockId::Root(self.chain.head_info().unwrap().block_root));
+        ids
+    }
+
     fn get_state(&self, state_id: StateId) -> Option<BeaconState<E>> {
         match state_id {
             StateId::Head => Some(self.chain.head().unwrap().beacon_state),
@@ -150,8 +186,8 @@ impl ApiTester {
         }
     }
 
-    pub async fn test_beacon_states_root(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
+    pub async fn test_beacon_states_root(self) -> Self {
+        for state_id in self.interesting_state_ids() {
             let result = self
                 .client
                 .beacon_states_root(state_id)
@@ -194,8 +230,8 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_states_fork(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
+    pub async fn test_beacon_states_fork(self) -> Self {
+        for state_id in self.interesting_state_ids() {
             let result = self
                 .client
                 .beacon_states_fork(state_id)
@@ -211,8 +247,8 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_states_finality_checkpoints(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
+    pub async fn test_beacon_states_finality_checkpoints(self) -> Self {
+        for state_id in self.interesting_state_ids() {
             let result = self
                 .client
                 .beacon_states_finality_checkpoints(state_id)
@@ -234,8 +270,8 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_states_validators(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
+    pub async fn test_beacon_states_validators(self) -> Self {
+        for state_id in self.interesting_state_ids() {
             let result = self
                 .client
                 .beacon_states_validators(state_id)
@@ -275,8 +311,8 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_states_validator_id(self, state_ids: &[StateId]) -> Self {
-        for &state_id in state_ids {
+    pub async fn test_beacon_states_validator_id(self) -> Self {
+        for state_id in self.interesting_state_ids() {
             let state_opt = self.get_state(state_id);
             let validators = match state_opt.as_ref() {
                 Some(state) => state.validators.clone().into(),
@@ -353,8 +389,8 @@ impl ApiTester {
         }
     }
 
-    pub async fn test_beacon_blocks_root(self, block_ids: &[BlockId]) -> Self {
-        for &block_id in block_ids {
+    pub async fn test_beacon_blocks_root(self) -> Self {
+        for block_id in self.interesting_block_ids() {
             let result = self
                 .client
                 .beacon_blocks_root(block_id)
@@ -371,76 +407,34 @@ impl ApiTester {
     }
 }
 
-fn interesting_state_ids() -> Vec<StateId> {
-    vec![
-        StateId::Head,
-        StateId::Genesis,
-        StateId::Finalized,
-        StateId::Justified,
-        StateId::Slot(Slot::new(0)),
-        StateId::Slot(Slot::new(32)),
-        StateId::Slot(Slot::from(SKIPPED_SLOTS[0])),
-        StateId::Slot(Slot::from(SKIPPED_SLOTS[1])),
-        StateId::Slot(Slot::from(SKIPPED_SLOTS[2])),
-        StateId::Slot(Slot::from(SKIPPED_SLOTS[3])),
-        StateId::Root(Hash256::zero()),
-    ]
-}
-
-fn interesting_block_ids() -> Vec<BlockId> {
-    vec![
-        BlockId::Head,
-        BlockId::Genesis,
-        BlockId::Finalized,
-        BlockId::Justified,
-        BlockId::Slot(Slot::new(0)),
-        BlockId::Slot(Slot::new(32)),
-        BlockId::Slot(Slot::from(SKIPPED_SLOTS[0])),
-        BlockId::Slot(Slot::from(SKIPPED_SLOTS[1])),
-        BlockId::Slot(Slot::from(SKIPPED_SLOTS[2])),
-        BlockId::Slot(Slot::from(SKIPPED_SLOTS[3])),
-        BlockId::Root(Hash256::zero()),
-    ]
-}
-
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_root() {
-    ApiTester::new()
-        .test_beacon_states_root(&interesting_state_ids())
-        .await;
+    ApiTester::new().test_beacon_states_root().await;
 }
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_fork() {
-    ApiTester::new()
-        .test_beacon_states_fork(&interesting_state_ids())
-        .await;
+    ApiTester::new().test_beacon_states_fork().await;
 }
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_finality_checkpoints() {
     ApiTester::new()
-        .test_beacon_states_finality_checkpoints(&interesting_state_ids())
+        .test_beacon_states_finality_checkpoints()
         .await;
 }
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_validators() {
-    ApiTester::new()
-        .test_beacon_states_validators(&interesting_state_ids())
-        .await;
+    ApiTester::new().test_beacon_states_validators().await;
 }
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_validator_id() {
-    ApiTester::new()
-        .test_beacon_states_validator_id(&interesting_state_ids())
-        .await;
+    ApiTester::new().test_beacon_states_validator_id().await;
 }
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_blocks_root() {
-    ApiTester::new()
-        .test_beacon_blocks_root(&interesting_block_ids())
-        .await;
+    ApiTester::new().test_beacon_blocks_root().await;
 }
