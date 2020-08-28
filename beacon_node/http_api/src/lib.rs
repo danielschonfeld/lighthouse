@@ -195,7 +195,7 @@ pub fn serve<T: BeaconChainTypes>(
                         let relative_epoch =
                             RelativeEpoch::from_epoch(state.current_epoch(), epoch).map_err(
                                 |_| {
-                                    crate::reject::custom_not_found(format!(
+                                    crate::reject::custom_bad_request(format!(
                                         "only previous, current and next epochs are supported"
                                     ))
                                 },
@@ -227,7 +227,7 @@ pub fn serve<T: BeaconChainTypes>(
                             // It is not acceptable to query with a slot that is not within the
                             // specified epoch.
                             if slot.epoch(T::EthSpec::slots_per_epoch()) != epoch {
-                                return Err(crate::reject::custom_not_found(format!(
+                                return Err(crate::reject::custom_bad_request(format!(
                                     "{} is not in epoch {}",
                                     slot, epoch
                                 )));
@@ -237,7 +237,7 @@ pub fn serve<T: BeaconChainTypes>(
                                 let committee = committee_cache
                                     .get_beacon_committee(slot, index)
                                     .ok_or_else(|| {
-                                    crate::reject::custom_not_found(format!(
+                                    crate::reject::custom_bad_request(format!(
                                         "committee index {} does not exist in epoch {}",
                                         index, epoch
                                     ))

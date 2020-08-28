@@ -21,6 +21,15 @@ pub fn custom_not_found(msg: String) -> warp::reject::Rejection {
     warp::reject::custom(CustomNotFound(msg))
 }
 
+#[derive(Debug)]
+pub struct CustomBadRequest(pub String);
+
+impl Reject for CustomBadRequest {}
+
+pub fn custom_bad_request(msg: String) -> warp::reject::Rejection {
+    warp::reject::custom(CustomBadRequest(msg))
+}
+
 /// An API error serializable to JSON.
 #[derive(Serialize)]
 struct ErrorMessage {
@@ -61,6 +70,9 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     } else if let Some(e) = err.find::<crate::reject::CustomNotFound>() {
         code = StatusCode::NOT_FOUND;
         message = format!("NOT_FOUND: {}", e.0);
+    } else if let Some(e) = err.find::<crate::reject::CustomBadRequest>() {
+        code = StatusCode::BAD_REQUEST;
+        message = format!("BAD_REQUEST: {}", e.0);
     } else {
         // We should have expected this... Just log and say its a 500
         eprintln!("unhandled rejection: {:?}", err);
