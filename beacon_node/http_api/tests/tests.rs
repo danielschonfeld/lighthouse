@@ -9,7 +9,7 @@ use store::config::StoreConfig;
 use tokio::sync::oneshot;
 use types::{
     test_utils::generate_deterministic_keypairs, BeaconState, EthSpec, Hash256, MainnetEthSpec,
-    Slot,
+    RelativeEpoch, Slot,
 };
 
 type E = MainnetEthSpec;
@@ -365,6 +365,54 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_beacon_states_committees(self) -> Self {
+        for state_id in self.interesting_state_ids() {
+            let state_opt = self.get_state(state_id);
+
+            let epoch = state_opt
+                .as_ref()
+                .map(|state| state.current_epoch())
+                .unwrap_or_else(|| Epoch::new(0));
+
+            let results = self
+                .client
+                .beacon_states_committees(state_id, epoch, None, None)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            if results.is_none() && state_opt.is_none() {
+                continue;
+            }
+
+            let state = state_opt.as_ref().expect("result should be none");
+            let committees = state
+                .get_beacon_committees_at_epoch(
+                    RelativeEpoch::from_epoch(state.current_epoch(), epoch).unwrap(),
+                )
+                .unwrap();
+
+            for (i, result) in results.unwrap().into_iter().enumerate() {
+                let expected = &committees[i];
+
+                assert_eq!(result.index, expected.index, "{}", state_id);
+                assert_eq!(result.slot, expected.slot, "{}", state_id);
+                assert_eq!(
+                    result
+                        .validators
+                        .into_iter()
+                        .map(|i| i as usize)
+                        .collect::<Vec<_>>(),
+                    expected.committee.to_vec(),
+                    "{}",
+                    state_id
+                );
+            }
+        }
+
+        self
+    }
+
     fn get_block_root(&self, block_id: BlockId) -> Option<Hash256> {
         match block_id {
             BlockId::Head => Some(self.chain.head_info().unwrap().block_root),
@@ -420,6 +468,11 @@ async fn beacon_states_finality_checkpoints() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_validators() {
     ApiTester::new().test_beacon_states_validators().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_states_committees() {
+    ApiTester::new().test_beacon_states_committees().await;
 }
 
 #[tokio::test(core_threads = 2)]

@@ -36,7 +36,9 @@ impl StateId {
         chain
             .state_root_at_slot(slot)
             .map_err(crate::reject::beacon_chain_error)?
-            .ok_or_else(|| warp::reject::not_found())
+            .ok_or_else(|| {
+                crate::reject::custom_not_found(format!("beacon state at slot {}", slot))
+            })
     }
 
     pub fn fork<T: BeaconChainTypes>(
@@ -63,7 +65,11 @@ impl StateId {
         chain
             .get_state(&state_root, slot_opt)
             .map_err(crate::reject::beacon_chain_error)
-            .and_then(|opt| opt.ok_or_else(|| warp::reject::not_found()))
+            .and_then(|opt| {
+                opt.ok_or_else(|| {
+                    crate::reject::custom_not_found(format!("beacon state at root {}", state_root))
+                })
+            })
     }
 
     pub fn map_state<T: BeaconChainTypes, F, U>(

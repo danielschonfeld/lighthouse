@@ -5,7 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 use types::serde_utils;
 
-pub use types::{Checkpoint, Fork, Hash256, PublicKeyBytes, Slot};
+pub use types::{Checkpoint, Epoch, Fork, Hash256, PublicKeyBytes, Slot};
 pub use validator_status::{ValidatorData, ValidatorStatus};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -173,12 +173,3 @@ pub struct CommitteeData {
     #[serde(with = "serde_utils::quoted_u64_vec")]
     pub validators: Vec<u64>,
 }
-
-/*
-QuotedItem<T>(T);
-
-impl<T: Serialize> fmt::Display for QuotedVec<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    }
-}
-*/

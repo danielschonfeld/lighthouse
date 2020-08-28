@@ -907,6 +907,13 @@ impl<T: EthSpec> BeaconState<T> {
         self.exit_cache = ExitCache::default();
     }
 
+    /// Returns `true` if the committee cache for `relative_epoch` is built and ready to use.
+    pub fn committee_cache_is_initialized(&self, relative_epoch: RelativeEpoch) -> bool {
+        let i = Self::committee_cache_index(relative_epoch);
+
+        self.committee_caches[i].is_initialized_at(relative_epoch.into_epoch(self.current_epoch()))
+    }
+
     /// Build an epoch cache, unless it is has already been built.
     pub fn build_committee_cache(
         &mut self,

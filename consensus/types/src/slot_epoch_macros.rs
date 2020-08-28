@@ -301,6 +301,18 @@ macro_rules! impl_serde {
     };
 }
 
+macro_rules! impl_from_str {
+    ($type: ident) => {
+        impl std::str::FromStr for $type {
+            type Err = std::num::ParseIntError;
+
+            fn from_str(s: &str) -> Result<$type, Self::Err> {
+                u64::from_str(s).map($type)
+            }
+        }
+    };
+}
+
 macro_rules! impl_common {
     ($type: ident) => {
         impl_from_into_u64!($type);
@@ -313,6 +325,7 @@ macro_rules! impl_common {
         impl_ssz!($type);
         impl_hash!($type);
         impl_serde!($type);
+        impl_from_str!($type);
     };
 }
 

@@ -1,7 +1,7 @@
 pub mod types;
 
 use self::types::*;
-use reqwest::{Error, StatusCode};
+use reqwest::{Error, StatusCode, Url};
 use serde::de::DeserializeOwned;
 
 const VERSION: &str = "eth/v1";
@@ -88,6 +88,32 @@ impl BeaconNodeClient {
     ) -> Result<Option<GenericResponse<Vec<ValidatorData>>>, Error> {
         self.get_opt(&format!("beacon/states/{}/validators", state_id))
             .await
+    }
+
+    /// `GET beacon/states/{state_id}/committees?slot,index`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_states_committees(
+        &self,
+        state_id: StateId,
+        epoch: Epoch,
+        slot: Option<Slot>,
+        index: Option<u64>,
+    ) -> Result<Option<GenericResponse<Vec<CommitteeData>>>, Error> {
+        let mut path = Url::parse(&format!("beacon/states/{}/committees/{}", state_id, epoch))
+            .expect("url should always be valid");
+
+        if let Some(slot) = slot {
+            path.query_pairs_mut()
+                .append_pair("slot", &slot.to_string());
+        }
+
+        if let Some(index) = index {
+            path.query_pairs_mut()
+                .append_pair("index", &index.to_string());
+        }
+
+        self.get_opt(&path.to_string()).await
     }
 
     /// `GET beacon/states/{state_id}/validators/{validator_id}`
