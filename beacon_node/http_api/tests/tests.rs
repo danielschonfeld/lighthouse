@@ -2,7 +2,7 @@ use beacon_chain::{
     test_utils::{AttestationStrategy, BeaconChainHarness, BlockStrategy, HarnessType},
     BeaconChain,
 };
-use eth2::{types::*, BeaconNodeClient};
+use eth2::{types::*, BeaconNodeClient, Url};
 use http_api::Context;
 use std::sync::Arc;
 use store::config::StoreConfig;
@@ -87,11 +87,15 @@ impl ApiTester {
 
         tokio::spawn(async { server.await });
 
-        let client = BeaconNodeClient::new(format!(
-            "http://{}:{}",
-            listening_socket.ip(),
-            listening_socket.port()
-        ));
+        let client = BeaconNodeClient::new(
+            Url::parse(&format!(
+                "http://{}:{}",
+                listening_socket.ip(),
+                listening_socket.port()
+            ))
+            .unwrap(),
+        )
+        .unwrap();
 
         Self {
             chain,
