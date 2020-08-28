@@ -2,6 +2,7 @@ mod attestation_tests;
 mod block_tests;
 mod interchange;
 mod interchange_tests;
+mod lower_bound;
 mod parallel_tests;
 mod registration_tests;
 mod signed_attestation;

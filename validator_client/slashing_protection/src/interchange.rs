@@ -90,6 +90,7 @@ impl Interchange {
 mod test {
     use super::*;
 
+    // FIXME(sproul): update and add more parsing tests
     #[test]
     fn minimal_example() {
         let interchange_json = r#"

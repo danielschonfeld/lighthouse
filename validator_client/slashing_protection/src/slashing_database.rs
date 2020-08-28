@@ -2,11 +2,12 @@ use crate::interchange::{
     CompleteInterchangeData, Interchange, InterchangeData, InterchangeFormat, InterchangeMetadata,
     SignedAttestation as InterchangeAttestation, SignedBlock as InterchangeBlock,
 };
+use crate::lower_bound::LowerBound;
 use crate::signed_attestation::InvalidAttestation;
 use crate::signed_block::InvalidBlock;
 use crate::{hash256_from_row, NotSafe, Safe, SignedAttestation, SignedBlock};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::time::Duration;
@@ -87,12 +88,45 @@ impl SlashingDatabase {
             params![],
         )?;
 
+        Self::create_lower_bounds_table(&conn)?;
+
         Ok(Self { conn_pool })
+    }
+
+    /// Check if the lower bounds table already exists.
+    pub fn lower_bounds_table_exists(conn: &Connection) -> Result<bool, NotSafe> {
+        let exists = conn
+            .query_row(
+                "SELECT TRUE FROM sqlite_master WHERE type='table' AND name='lower_bounds'",
+                params![],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(exists.unwrap_or(false))
+    }
+
+    /// Create the table of lower bounds.
+    pub fn create_lower_bounds_table(conn: &Connection) -> Result<(), NotSafe> {
+        conn.execute(
+            "CREATE TABLE lower_bounds (
+                validator_id INTEGER UNIQUE,
+                block_proposal_slot INTEGER NOT NULL,
+                attestation_source_epoch INTEGER NOT NULL,
+                attestation_target_epoch INTEGER NOT NULL,
+                FOREIGN KEY(validator_id) REFERENCES validators(id)
+            )",
+            params![],
+        )?;
+        Ok(())
     }
 
     /// Open an existing `SlashingDatabase` from disk.
     pub fn open(path: &Path) -> Result<Self, NotSafe> {
         let conn_pool = Self::open_conn_pool(&path)?;
+        let conn = conn_pool.get()?;
+        if !Self::lower_bounds_table_exists(&conn)? {
+            Self::create_lower_bounds_table(&conn)?;
+        }
         Ok(Self { conn_pool })
     }
 
@@ -189,6 +223,7 @@ impl SlashingDatabase {
     }
 
     /// Optional version of `get_validator_id`.
+    // FIXME(sproul): add a `&self` argument to all of these methods
     fn get_validator_id_opt(
         txn: &Transaction,
         public_key: &PublicKey,
@@ -202,6 +237,47 @@ impl SlashingDatabase {
             .optional()?)
     }
 
+    /// Get the lower bound for a validator ID.
+    fn get_lower_bound(
+        &self,
+        txn: &Transaction,
+        validator_id: i64,
+    ) -> Result<Option<LowerBound>, NotSafe> {
+        let lb = txn
+            .query_row(
+                "SELECT block_proposal_slot, attestation_source_epoch, attestation_target_epoch
+                 FROM lower_bounds
+                 WHERE validator_id = ?1",
+                params![validator_id],
+                LowerBound::from_row,
+            )
+            .optional()?;
+        Ok(lb)
+    }
+
+    fn set_lower_bound(
+        &self,
+        txn: &Transaction,
+        validator_id: i64,
+        lower_bound: LowerBound,
+    ) -> Result<(), NotSafe> {
+        txn.execute(
+            "REPLACE INTO lower_bounds (
+                validator_id,
+                block_proposal_slot,
+                attestation_source_epoch,
+                attestation_target_epoch
+             ) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                validator_id,
+                lower_bound.block_proposal_slot,
+                lower_bound.attestation_source_epoch,
+                lower_bound.attestation_target_epoch
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Check a block proposal from `validator_pubkey` for slash safety.
     fn check_block_proposal(
         &self,
@@ -211,6 +287,17 @@ impl SlashingDatabase {
         signing_root: Hash256,
     ) -> Result<Safe, NotSafe> {
         let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
+
+        if let Some(lower_bound) = self.get_lower_bound(txn, validator_id)? {
+            if slot <= lower_bound.block_proposal_slot {
+                return Err(NotSafe::InvalidBlock(
+                    InvalidBlock::SlotViolatesLowerBound {
+                        block_slot: slot,
+                        bound_slot: lower_bound.block_proposal_slot,
+                    },
+                ));
+            }
+        }
 
         let existing_block = txn
             .prepare(
@@ -255,8 +342,28 @@ impl SlashingDatabase {
 
         let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
-        // 1. Check for a double vote. Namely, an existing attestation with the same target epoch,
-        //    and a different signing root.
+        // Check for a lower-bound violation on either the source of the target.
+        if let Some(lower_bound) = self.get_lower_bound(txn, validator_id)? {
+            if att_source_epoch < lower_bound.attestation_source_epoch {
+                return Err(NotSafe::InvalidAttestation(
+                    InvalidAttestation::SourceLessThanLowerBound {
+                        source_epoch: att_source_epoch,
+                        bound_epoch: lower_bound.attestation_source_epoch,
+                    },
+                ));
+            }
+            if att_target_epoch <= lower_bound.attestation_target_epoch {
+                return Err(NotSafe::InvalidAttestation(
+                    InvalidAttestation::TargetLessThanOrEqLowerBound {
+                        target_epoch: att_target_epoch,
+                        bound_epoch: lower_bound.attestation_target_epoch,
+                    },
+                ));
+            }
+        }
+
+        // Check for a double vote. Namely, an existing attestation with the same target epoch,
+        // and a different signing root.
         let same_target_att = txn
             .prepare(
                 "SELECT source_epoch, target_epoch, signing_root
@@ -282,7 +389,7 @@ impl SlashingDatabase {
             }
         }
 
-        // 2. Check that no previous vote is surrounding `attestation`.
+        // Check that no previous vote is surrounding `attestation`.
         // If there is a surrounding attestation, we only return the most recent one.
         let surrounding_attestation = txn
             .prepare(
@@ -304,7 +411,7 @@ impl SlashingDatabase {
             ));
         }
 
-        // 3. Check that no previous vote is surrounded by `attestation`.
+        // Check that no previous vote is surrounded by `attestation`.
         // If there is a surrounded attestation, we only return the most recent one.
         let surrounded_attestation = txn
             .prepare(
@@ -439,7 +546,7 @@ impl SlashingDatabase {
     }
 
     /// As for `check_and_insert_attestation` but without requiring the whole `AttestationData`.
-    fn check_and_insert_attestation_signing_root(
+    pub fn check_and_insert_attestation_signing_root(
         &self,
         validator_pubkey: &PublicKey,
         att_source_epoch: Epoch,
@@ -472,7 +579,6 @@ impl SlashingDatabase {
     }
 
     /// Import slashing protection from another client in the interchange format.
-    // TODO: it might be nice to make this whole operation atomic (one transaction)
     pub fn import_interchange_info(
         &self,
         interchange: &Interchange,
@@ -492,29 +598,29 @@ impl SlashingDatabase {
 
         match &interchange.data {
             InterchangeData::Minimal(records) => {
+                let mut conn = self.conn_pool.get()?;
+                let txn = conn.transaction()?;
+
+                // Register validators.
+                self.register_validators_in_txn(&txn, records.iter().map(|r| &r.pubkey))?;
+
+                // Update lower bounds.
                 for record in records {
-                    self.register_validator(&record.pubkey)?;
+                    let validator_id = Self::get_validator_id_in_txn(&txn, &record.pubkey)?;
 
-                    // Insert synthetic blocks for every slot up to the maximum.
-                    for slot in 0..record.last_signed_block_slot.as_u64() {
-                        self.check_and_insert_block_signing_root(
-                            &record.pubkey,
-                            Slot::new(slot),
-                            Hash256::zero(),
-                        )?;
-                    }
-
-                    // Insert one synthetic attestation that surrounds or conflicts with
-                    // all previous attestations, except attestations from the 0 source,
-                    // which are handled by the minimum
-                    self.check_and_insert_attestation_signing_root(
-                        &record.pubkey,
-                        Epoch::new(0),
-                        record.last_signed_attestation_target_epoch,
-                        Hash256::zero(),
-                    )?;
+                    let lower_bound = self
+                        .get_lower_bound(&txn, validator_id)?
+                        .unwrap_or_else(LowerBound::default)
+                        .update(LowerBound {
+                            block_proposal_slot: record.last_signed_block_slot,
+                            attestation_source_epoch: record.last_signed_attestation_source_epoch,
+                            attestation_target_epoch: record.last_signed_attestation_target_epoch,
+                        });
+                    self.set_lower_bound(&txn, validator_id, lower_bound)?;
                 }
+                txn.commit()?;
             }
+            // TODO: it might be nice to make this whole operation atomic (one transaction)
             InterchangeData::Complete(records) => {
                 for record in records {
                     self.register_validator(&record.pubkey)?;
@@ -660,7 +766,6 @@ impl From<r2d2::Error> for InterchangeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::pubkey;
     use tempfile::tempdir;
 
     #[test]
@@ -676,9 +781,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let file = dir.path().join("db.sqlite");
         let _db1 = SlashingDatabase::create(&file).unwrap();
-
-        let db2 = SlashingDatabase::open(&file).unwrap();
-        db2.register_validator(&pubkey(0)).unwrap_err();
+        SlashingDatabase::open(&file).unwrap_err();
     }
 
     // Attempting to create the same database twice should error.
