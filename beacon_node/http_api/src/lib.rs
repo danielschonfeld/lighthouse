@@ -196,7 +196,8 @@ pub fn serve<T: BeaconChainTypes>(
                             RelativeEpoch::from_epoch(state.current_epoch(), epoch).map_err(
                                 |_| {
                                     crate::reject::custom_bad_request(format!(
-                                        "only previous, current and next epochs are supported"
+                                        "state is epoch {} and only previous, current and next epochs are supported",
+                                        state.current_epoch()
                                     ))
                                 },
                             )?;
