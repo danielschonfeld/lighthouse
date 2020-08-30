@@ -8,6 +8,15 @@ use types::serde_utils;
 pub use types::{Checkpoint, Epoch, Fork, Hash256, PublicKeyBytes, Slot};
 pub use validator_status::{ValidatorData, ValidatorStatus};
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GenesisData {
+    #[serde(with = "serde_utils::quoted")]
+    pub genesis_time: u64,
+    pub genesis_validators_root: Hash256,
+    #[serde(with = "serde_utils::fork_bytes_4")]
+    pub genesis_fork_version: [u8; 4],
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BlockId {
     Head,

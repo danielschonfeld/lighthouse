@@ -190,6 +190,21 @@ impl ApiTester {
         }
     }
 
+    pub async fn test_beacon_genesis(self) -> Self {
+        let result = self.client.beacon_genesis().await.unwrap().data;
+
+        let state = self.chain.head().unwrap().beacon_state;
+        let expected = GenesisData {
+            genesis_time: state.genesis_time,
+            genesis_validators_root: state.genesis_validators_root,
+            genesis_fork_version: self.chain.spec.genesis_fork_version,
+        };
+
+        assert_eq!(result, expected);
+
+        self
+    }
+
     pub async fn test_beacon_states_root(self) -> Self {
         for state_id in self.interesting_state_ids() {
             let result = self
@@ -450,6 +465,11 @@ impl ApiTester {
 
         self
     }
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_genesis() {
+    ApiTester::new().test_beacon_genesis().await;
 }
 
 #[tokio::test(core_threads = 2)]

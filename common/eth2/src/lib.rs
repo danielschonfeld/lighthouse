@@ -22,6 +22,16 @@ impl BeaconNodeClient {
         })
     }
 
+    async fn get<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<T, Error> {
+        self.client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+    }
+
     async fn get_opt<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<Option<T>, Error> {
         match self.client.get(url).send().await?.error_for_status() {
             Ok(resp) => resp.json().await.map(Option::Some),
@@ -33,6 +43,22 @@ impl BeaconNodeClient {
                 }
             }
         }
+    }
+
+    /// `GET beacon/genesis`
+    ///
+    /// ## Errors
+    ///
+    /// May return a `404` if beacon chain genesis has not yet occurred.
+    pub async fn beacon_genesis(&self) -> Result<GenericResponse<GenesisData>, Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("genesis");
+
+        self.get(path).await
     }
 
     /// `GET beacon/states/{state_id}/root`

@@ -36,12 +36,34 @@ pub fn serve<T: BeaconChainTypes>(
         .and_then(|chain| async move {
             match chain {
                 Some(chain) => Ok(chain),
-                None => Err(warp::reject::not_found()),
+                None => Err(crate::reject::custom_not_found(
+                    "Beacon chain genesis has not yet been observed.".to_string(),
+                )),
             }
         });
 
+    // beacon/genesis
+    let beacon_genesis = base_path
+        .and(warp::path("beacon"))
+        .and(warp::path("genesis"))
+        .and(warp::path::end())
+        .and(chain_filter.clone())
+        .and_then(|chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                chain
+                    .head_info()
+                    .map_err(crate::reject::beacon_chain_error)
+                    .map(|head| api_types::GenesisData {
+                        genesis_time: head.genesis_time,
+                        genesis_validators_root: head.genesis_validators_root,
+                        genesis_fork_version: chain.spec.genesis_fork_version,
+                    })
+                    .map(api_types::GenericResponse::from)
+            })
+        });
+
     /*
-     * beacon/states
+     * beacon/states/{state_id}
      */
 
     let beacon_states_path = base_path
@@ -286,7 +308,8 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    let routes = beacon_state_root
+    let routes = beacon_genesis
+        .or(beacon_state_root)
         .or(beacon_state_fork)
         .or(beacon_state_finality_checkpoints)
         .or(beacon_state_validators)
