@@ -4,7 +4,7 @@ use crate::interchange::{
     Interchange, InterchangeData, InterchangeFormat, InterchangeMetadata, MinimalInterchangeData,
 };
 use crate::test_utils::pubkey;
-use crate::{InvalidBlock, NotSafe, SlashingDatabase};
+use crate::{InvalidBlock, NotSafe, SlashingDatabase, SUPPORTED_INTERCHANGE_FORMAT_VERSION};
 use tempfile::tempdir;
 use types::{Epoch, Hash256, Slot};
 
@@ -78,7 +78,7 @@ fn import_minimal_test(data: Vec<MinimalInterchangeData>) {
     let interchange = Interchange {
         metadata: InterchangeMetadata {
             interchange_format: InterchangeFormat::Minimal,
-            interchange_format_version: 1,
+            interchange_format_version: SUPPORTED_INTERCHANGE_FORMAT_VERSION,
             genesis_validators_root,
         },
         data: InterchangeData::Minimal(data.clone()),
@@ -161,7 +161,7 @@ fn double_import_minimal(data: Vec<MinimalInterchangeData>) {
     let interchange = Interchange {
         metadata: InterchangeMetadata {
             interchange_format: InterchangeFormat::Minimal,
-            interchange_format_version: 1,
+            interchange_format_version: SUPPORTED_INTERCHANGE_FORMAT_VERSION,
             genesis_validators_root,
         },
         data: InterchangeData::Minimal(data.clone()),

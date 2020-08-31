@@ -26,7 +26,7 @@ pub const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 pub const CONNECTION_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Supported version of the interchange format.
-pub const SUPPORTED_INTERCHANGE_FORMAT_VERSION: u16 = 1;
+pub const SUPPORTED_INTERCHANGE_FORMAT_VERSION: u64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct SlashingDatabase {
@@ -735,7 +735,7 @@ impl SlashingDatabase {
 
 #[derive(Debug)]
 pub enum InterchangeError {
-    UnsupportedVersion(u16),
+    UnsupportedVersion(u64),
     GenesisValidatorsMismatch {
         interchange_file: Hash256,
         client: Hash256,
