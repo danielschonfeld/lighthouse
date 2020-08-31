@@ -72,8 +72,21 @@ pub struct Interchange {
 }
 
 impl Interchange {
-    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
-        let pre_interchange = serde_json::from_str::<PreInterchange>(json)?;
+    pub fn from_json_str(json: &str) -> Result<Self, serde_json::Error> {
+        let pre_interchange = serde_json::from_str(json)?;
+        Self::from_pre_interchange(pre_interchange)
+    }
+
+    pub fn from_json_reader(reader: impl std::io::Read) -> Result<Self, serde_json::Error> {
+        let pre_interchange = serde_json::from_reader(reader)?;
+        Self::from_pre_interchange(pre_interchange)
+    }
+
+    pub fn write_to(&self, writer: impl std::io::Write) -> Result<(), serde_json::Error> {
+        serde_json::to_writer(writer, self)
+    }
+
+    fn from_pre_interchange(pre_interchange: PreInterchange) -> Result<Self, serde_json::Error> {
         let metadata = pre_interchange.metadata;
         let data = match metadata.interchange_format {
             InterchangeFormat::Minimal => {

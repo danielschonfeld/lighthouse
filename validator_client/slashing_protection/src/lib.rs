@@ -1,6 +1,6 @@
 mod attestation_tests;
 mod block_tests;
-mod interchange;
+pub mod interchange;
 mod interchange_tests;
 mod lower_bound;
 mod parallel_tests;

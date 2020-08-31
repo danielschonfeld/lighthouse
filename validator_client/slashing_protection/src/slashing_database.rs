@@ -579,6 +579,7 @@ impl SlashingDatabase {
     }
 
     /// Import slashing protection from another client in the interchange format.
+    // FIXME(sproul): add logging
     pub fn import_interchange_info(
         &self,
         interchange: &Interchange,
@@ -650,6 +651,7 @@ impl SlashingDatabase {
         Ok(())
     }
 
+    // FIXME(sproul): add logging
     pub fn export_interchange_info(
         &self,
         genesis_validators_root: Hash256,
