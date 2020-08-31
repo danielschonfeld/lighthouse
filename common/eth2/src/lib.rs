@@ -219,6 +219,24 @@ impl BeaconNodeClient {
         self.get_opt(path).await
     }
 
+    /// `GET beacon/headers/{block_id}`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_headers_block_id(
+        &self,
+        block_id: BlockId,
+    ) -> Result<Option<GenericResponse<Vec<BlockHeaderData>>>, Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("headers")
+            .push(&block_id.to_string());
+
+        self.get_opt(path).await
+    }
+
     /// `GET beacon/blocks/{block_id}/root`
     ///
     /// Returns `Ok(None)` on a 404 error.

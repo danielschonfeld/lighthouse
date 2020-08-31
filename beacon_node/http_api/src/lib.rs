@@ -358,6 +358,35 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
+    // beacon/headers/{block_id}
+    let beacon_headers_block_id = base_path
+        .and(warp::path("beacon"))
+        .and(warp::path("headers"))
+        .and(warp::path::param::<BlockId>())
+        .and(chain_filter.clone())
+        .and_then(|block_id: BlockId, chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                let root = block_id.root(&chain)?;
+                let block = BlockId::from_root(root).block(&chain)?;
+
+                let canonical = chain
+                    .block_root_at_slot(block.slot())
+                    .map_err(crate::reject::beacon_chain_error)?
+                    .map_or(false, |canonical| root == canonical);
+
+                let data = api_types::BlockHeaderData {
+                    root,
+                    canonical,
+                    header: api_types::BlockHeaderAndSignature {
+                        message: block.message.block_header(),
+                        signature: block.signature.into(),
+                    },
+                };
+
+                Ok(api_types::GenericResponse::from(data))
+            })
+        });
+
     /*
      * beacon/blocks/{block_id}
      */
@@ -390,6 +419,7 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_state_validators_id)
         .or(beacon_state_committees)
         .or(beacon_headers)
+        .or(beacon_headers_block_id)
         .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 
