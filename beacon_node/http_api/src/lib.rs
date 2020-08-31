@@ -294,15 +294,18 @@ pub fn serve<T: BeaconChainTypes>(
             |query: api_types::HeadersQuery, chain: Arc<BeaconChain<T>>| {
                 blocking_json_task(move || {
                     let (root, block) = match (query.slot, query.parent_root) {
+                        // No query parameters, return the canonical head block.
                         (None, None) => chain
                             .head_beacon_block()
                             .map_err(crate::reject::beacon_chain_error)
                             .map(|block| (block.canonical_root(), block))?,
+                        // Only the parent root parameter, do a forwards-iterator lookup.
                         (None, Some(parent_root)) => {
                             let parent = BlockId::from_root(parent_root).block(&chain)?;
                             let root = chain
                                 .forwards_iter_block_roots(parent.slot())
                                 .map_err(crate::reject::beacon_chain_error)?
+                                .skip(1)
                                 .next()
                                 .transpose()
                                 .map_err(crate::reject::beacon_chain_error)?
@@ -318,6 +321,8 @@ pub fn serve<T: BeaconChainTypes>(
                                 .block(&chain)
                                 .map(|block| (root, block))?
                         }
+                        // Slot is supplied, search by slot and optionally filter by
+                        // parent root.
                         (Some(slot), parent_root_opt) => {
                             let root = BlockId::from_slot(slot).root(&chain)?;
                             let block = BlockId::from_root(root).block(&chain)?;

@@ -64,6 +64,9 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
         code = StatusCode::METHOD_NOT_ALLOWED;
         message = "METHOD_NOT_ALLOWED".to_string();
+    } else if let Some(e) = err.find::<warp::reject::InvalidQuery>() {
+        code = StatusCode::BAD_REQUEST;
+        message = format!("BAD_REQUEST (invalid query): {}", e);
     } else if let Some(e) = err.find::<crate::reject::BeaconChainError>() {
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = format!("UNHANDLED_ERROR: {:?}", e.0);

@@ -197,7 +197,7 @@ impl BeaconNodeClient {
     pub async fn beacon_headers(
         &self,
         slot: Option<Slot>,
-        parent_root: Option<u64>,
+        parent_root: Option<Hash256>,
     ) -> Result<Option<GenericResponse<Vec<BlockHeaderData>>>, Error> {
         let mut path = self.server.clone();
 
@@ -213,7 +213,7 @@ impl BeaconNodeClient {
 
         if let Some(root) = parent_root {
             path.query_pairs_mut()
-                .append_pair("parent_root", &root.to_string());
+                .append_pair("parent_root", &format!("{:?}", root));
         }
 
         self.get_opt(path).await

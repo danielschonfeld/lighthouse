@@ -484,6 +484,37 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_beacon_headers_all_parents(self) -> Self {
+        let roots = self
+            .chain
+            .rev_iter_block_roots()
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|(root, _slot)| root)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+
+        for i in 1..roots.len() {
+            let parent_root = roots[i - 1];
+            let child_root = roots[i];
+
+            let result = self
+                .client
+                .beacon_headers(None, Some(parent_root))
+                .await
+                .unwrap()
+                .unwrap()
+                .data;
+
+            assert_eq!(result.len(), 1, "i {}", i);
+            assert_eq!(result[0].root, child_root, "i {}", i);
+        }
+
+        self
+    }
+
     pub async fn test_beacon_blocks_root(self) -> Self {
         for block_id in self.interesting_block_ids() {
             let result = self
@@ -541,7 +572,11 @@ async fn beacon_states_validator_id() {
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_headers() {
-    ApiTester::new().test_beacon_headers_all_slots().await;
+    ApiTester::new()
+        .test_beacon_headers_all_slots()
+        .await
+        .test_beacon_headers_all_parents()
+        .await;
 }
 
 #[tokio::test(core_threads = 2)]
