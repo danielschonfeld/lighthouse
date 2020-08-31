@@ -302,14 +302,16 @@ pub fn serve<T: BeaconChainTypes>(
                         // Only the parent root parameter, do a forwards-iterator lookup.
                         (None, Some(parent_root)) => {
                             let parent = BlockId::from_root(parent_root).block(&chain)?;
-                            let root = chain
+                            let (root, _slot) = chain
                                 .forwards_iter_block_roots(parent.slot())
                                 .map_err(crate::reject::beacon_chain_error)?
-                                .skip(1)
+                                // Ignore any skip-slots immediately following the parent.
+                                .skip_while(|res| {
+                                    res.as_ref().map_or(false, |(root, _)| *root == parent_root)
+                                })
                                 .next()
                                 .transpose()
                                 .map_err(crate::reject::beacon_chain_error)?
-                                .map(|(root, _)| root)
                                 .ok_or_else(|| {
                                     crate::reject::custom_not_found(format!(
                                         "child of block with root {}",

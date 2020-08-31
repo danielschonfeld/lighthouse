@@ -485,7 +485,7 @@ impl ApiTester {
     }
 
     pub async fn test_beacon_headers_all_parents(self) -> Self {
-        let roots = self
+        let mut roots = self
             .chain
             .rev_iter_block_roots()
             .unwrap()
@@ -495,6 +495,9 @@ impl ApiTester {
             .into_iter()
             .rev()
             .collect::<Vec<_>>();
+
+        // The iterator natively returns duplicate roots for skipped slots.
+        roots.dedup();
 
         for i in 1..roots.len() {
             let parent_root = roots[i - 1];
