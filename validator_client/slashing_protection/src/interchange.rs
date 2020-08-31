@@ -21,9 +21,9 @@ pub struct InterchangeMetadata {
 #[serde(deny_unknown_fields)]
 pub struct MinimalInterchangeData {
     pub pubkey: PublicKey,
-    pub last_signed_block_slot: Slot,
-    pub last_signed_attestation_source_epoch: Epoch,
-    pub last_signed_attestation_target_epoch: Epoch,
+    pub last_signed_block_slot: Option<Slot>,
+    pub last_signed_attestation_source_epoch: Option<Epoch>,
+    pub last_signed_attestation_target_epoch: Option<Epoch>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -105,6 +105,7 @@ mod test {
     use super::*;
 
     // FIXME(sproul): update and add more parsing tests
+    // FIXME(sproul): add update max tests
     #[test]
     fn minimal_example() {
         let interchange_json = r#"
@@ -124,7 +125,7 @@ mod test {
                 ]
             }
         "#;
-        let interchange = Interchange::from_json(interchange_json).unwrap();
+        let interchange = Interchange::from_json_str(interchange_json).unwrap();
         println!("{:#?}", interchange);
         println!("{}", serde_json::to_string_pretty(&interchange).unwrap());
     }

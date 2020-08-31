@@ -110,9 +110,9 @@ impl SlashingDatabase {
         conn.execute(
             "CREATE TABLE lower_bounds (
                 validator_id INTEGER UNIQUE,
-                block_proposal_slot INTEGER NOT NULL,
-                attestation_source_epoch INTEGER NOT NULL,
-                attestation_target_epoch INTEGER NOT NULL,
+                block_proposal_slot INTEGER,
+                attestation_source_epoch INTEGER,
+                attestation_target_epoch INTEGER,
                 FOREIGN KEY(validator_id) REFERENCES validators(id)
             )",
             params![],
@@ -288,12 +288,15 @@ impl SlashingDatabase {
     ) -> Result<Safe, NotSafe> {
         let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
 
-        if let Some(lower_bound) = self.get_lower_bound(txn, validator_id)? {
-            if slot <= lower_bound.block_proposal_slot {
+        if let Some(lower_bound_slot) = self
+            .get_lower_bound(txn, validator_id)?
+            .and_then(|lb| lb.block_proposal_slot)
+        {
+            if slot <= lower_bound_slot {
                 return Err(NotSafe::InvalidBlock(
                     InvalidBlock::SlotViolatesLowerBound {
                         block_slot: slot,
-                        bound_slot: lower_bound.block_proposal_slot,
+                        bound_slot: lower_bound_slot,
                     },
                 ));
             }
@@ -344,21 +347,25 @@ impl SlashingDatabase {
 
         // Check for a lower-bound violation on either the source of the target.
         if let Some(lower_bound) = self.get_lower_bound(txn, validator_id)? {
-            if att_source_epoch < lower_bound.attestation_source_epoch {
-                return Err(NotSafe::InvalidAttestation(
-                    InvalidAttestation::SourceLessThanLowerBound {
-                        source_epoch: att_source_epoch,
-                        bound_epoch: lower_bound.attestation_source_epoch,
-                    },
-                ));
+            if let Some(source_lower_bound) = lower_bound.attestation_source_epoch {
+                if att_source_epoch < source_lower_bound {
+                    return Err(NotSafe::InvalidAttestation(
+                        InvalidAttestation::SourceLessThanLowerBound {
+                            source_epoch: att_source_epoch,
+                            bound_epoch: source_lower_bound,
+                        },
+                    ));
+                }
             }
-            if att_target_epoch <= lower_bound.attestation_target_epoch {
-                return Err(NotSafe::InvalidAttestation(
-                    InvalidAttestation::TargetLessThanOrEqLowerBound {
-                        target_epoch: att_target_epoch,
-                        bound_epoch: lower_bound.attestation_target_epoch,
-                    },
-                ));
+            if let Some(target_lower_bound) = lower_bound.attestation_target_epoch {
+                if att_target_epoch <= target_lower_bound {
+                    return Err(NotSafe::InvalidAttestation(
+                        InvalidAttestation::TargetLessThanOrEqLowerBound {
+                            target_epoch: att_target_epoch,
+                            bound_epoch: target_lower_bound,
+                        },
+                    ));
+                }
             }
         }
 
@@ -609,6 +616,15 @@ impl SlashingDatabase {
                 for record in records {
                     let validator_id = Self::get_validator_id_in_txn(&txn, &record.pubkey)?;
 
+                    // If a source or target is provided, both should be.
+                    if record.last_signed_attestation_source_epoch.is_some()
+                        != record.last_signed_attestation_target_epoch.is_some()
+                    {
+                        return Err(
+                            InterchangeError::MinimalAttestationSourceAndTargetInconsistent,
+                        );
+                    }
+
                     let lower_bound = self
                         .get_lower_bound(&txn, validator_id)?
                         .unwrap_or_else(LowerBound::default)
@@ -742,6 +758,7 @@ pub enum InterchangeError {
         interchange_file: Hash256,
         client: Hash256,
     },
+    MinimalAttestationSourceAndTargetInconsistent,
     SQLError(String),
     SQLPoolError(r2d2::Error),
     NotSafe(NotSafe),

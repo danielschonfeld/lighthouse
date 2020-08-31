@@ -22,6 +22,7 @@ dependencies = [
  "libc",
  "rand 0.7.3",
  "rayon",
+ "slashing_protection",
  "slog",
  "slog-async",
  "slog-term",

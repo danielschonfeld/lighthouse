@@ -12,9 +12,9 @@ use types::{Epoch, Hash256, Slot};
 fn import_minimal_single_basic1() {
     let data = vec![MinimalInterchangeData {
         pubkey: pubkey(0),
-        last_signed_block_slot: Slot::new(10),
-        last_signed_attestation_source_epoch: Epoch::new(1),
-        last_signed_attestation_target_epoch: Epoch::new(2),
+        last_signed_block_slot: Some(Slot::new(10)),
+        last_signed_attestation_source_epoch: Some(Epoch::new(1)),
+        last_signed_attestation_target_epoch: Some(Epoch::new(2)),
     }];
     import_minimal_test(data.clone());
     double_import_minimal(data);
@@ -24,9 +24,9 @@ fn import_minimal_single_basic1() {
 fn import_minimal_single_basic2() {
     let data = vec![MinimalInterchangeData {
         pubkey: pubkey(0),
-        last_signed_block_slot: Slot::new(15670),
-        last_signed_attestation_source_epoch: Epoch::new(200),
-        last_signed_attestation_target_epoch: Epoch::new(305),
+        last_signed_block_slot: Some(Slot::new(15670)),
+        last_signed_attestation_source_epoch: Some(Epoch::new(200)),
+        last_signed_attestation_target_epoch: Some(Epoch::new(305)),
     }];
     import_minimal_test(data.clone());
     double_import_minimal(data);
@@ -36,9 +36,9 @@ fn import_minimal_single_basic2() {
 fn import_minimal_single_all_zero() {
     let data = vec![MinimalInterchangeData {
         pubkey: pubkey(0),
-        last_signed_block_slot: Slot::new(0),
-        last_signed_attestation_source_epoch: Epoch::new(0),
-        last_signed_attestation_target_epoch: Epoch::new(0),
+        last_signed_block_slot: Some(Slot::new(0)),
+        last_signed_attestation_source_epoch: Some(Epoch::new(0)),
+        last_signed_attestation_target_epoch: Some(Epoch::new(0)),
     }];
     import_minimal_test(data.clone());
     double_import_minimal(data);
@@ -48,9 +48,9 @@ fn import_minimal_single_all_zero() {
 fn import_minimal_single_equal_epoch() {
     let data = vec![MinimalInterchangeData {
         pubkey: pubkey(0),
-        last_signed_block_slot: Slot::new(0),
-        last_signed_attestation_source_epoch: Epoch::new(10),
-        last_signed_attestation_target_epoch: Epoch::new(10),
+        last_signed_block_slot: Some(Slot::new(0)),
+        last_signed_attestation_source_epoch: Some(Epoch::new(10)),
+        last_signed_attestation_target_epoch: Some(Epoch::new(10)),
     }];
     import_minimal_test(data.clone());
     double_import_minimal(data);
@@ -60,9 +60,9 @@ fn import_minimal_single_equal_epoch() {
 fn import_minimal_single_big() {
     let data = vec![MinimalInterchangeData {
         pubkey: pubkey(0),
-        last_signed_block_slot: Slot::new(1_048_576),
-        last_signed_attestation_source_epoch: Epoch::new(32_767),
-        last_signed_attestation_target_epoch: Epoch::new(32_768),
+        last_signed_block_slot: Some(Slot::new(1_048_576)),
+        last_signed_attestation_source_epoch: Some(Epoch::new(32_767)),
+        last_signed_attestation_target_epoch: Some(Epoch::new(32_768)),
     }];
     // Don't verify, because it takes too long, just check we're able to import within
     // a reasonable time.
@@ -90,64 +90,72 @@ fn import_minimal_test(data: Vec<MinimalInterchangeData>) {
 
     for validator in data {
         // Blocks with slots less than or equal to the last signed block slot should be rejected.
-        for slot in 0..=validator.last_signed_block_slot.as_u64() {
-            let res = slashing_db.check_and_insert_block_signing_root(
-                &validator.pubkey,
-                Slot::new(slot),
-                Hash256::from_low_u64_be(slot + 1),
-            );
-            assert!(matches!(
-                res.unwrap_err(),
-                NotSafe::InvalidBlock(InvalidBlock::SlotViolatesLowerBound { .. })
-            ));
+        if let Some(last_signed_block_slot) = validator.last_signed_block_slot {
+            for slot in 0..=last_signed_block_slot.as_u64() {
+                let res = slashing_db.check_and_insert_block_signing_root(
+                    &validator.pubkey,
+                    Slot::new(slot),
+                    Hash256::from_low_u64_be(slot + 1),
+                );
+                assert!(matches!(
+                    res.unwrap_err(),
+                    NotSafe::InvalidBlock(InvalidBlock::SlotViolatesLowerBound { .. })
+                ));
+            }
         }
 
         // A block at the next slot is permissible.
         slashing_db
             .check_and_insert_block_signing_root(
                 &validator.pubkey,
-                validator.last_signed_block_slot + 1,
+                validator.last_signed_block_slot.unwrap_or(Slot::new(0)) + 1,
                 Hash256::from_low_u64_be(1),
             )
             .unwrap();
 
         // Attestations at all targets between 0 and the target limit (inclusive) should be barred.
-        for epoch in 0..=validator.last_signed_attestation_target_epoch.as_u64() {
-            let target = Epoch::new(epoch);
-            let source = Epoch::new(epoch.saturating_sub(1));
-            let res = slashing_db.check_and_insert_attestation_signing_root(
-                &validator.pubkey,
-                source,
-                target,
-                Hash256::from_low_u64_be(epoch + 1),
-            );
-            assert!(matches!(res.unwrap_err(), NotSafe::InvalidAttestation(_)));
-        }
-
-        // An attestation that surrounds max source and max target should be barred.
-        if validator.last_signed_attestation_source_epoch
-            != validator.last_signed_attestation_target_epoch
+        if let Some(last_signed_attestation_target_epoch) =
+            validator.last_signed_attestation_target_epoch
         {
-            let err = slashing_db
+            for epoch in 0..=last_signed_attestation_target_epoch.as_u64() {
+                let target = Epoch::new(epoch);
+                let source = Epoch::new(epoch.saturating_sub(1));
+                let res = slashing_db.check_and_insert_attestation_signing_root(
+                    &validator.pubkey,
+                    source,
+                    target,
+                    Hash256::from_low_u64_be(epoch + 1),
+                );
+                assert!(matches!(res.unwrap_err(), NotSafe::InvalidAttestation(_)));
+            }
+
+            let last_signed_attestation_source_epoch = validator
+                .last_signed_attestation_source_epoch
+                .expect("should be Some if target is Some");
+
+            // An attestation that surrounds max source and max target should be barred.
+            if last_signed_attestation_source_epoch != last_signed_attestation_target_epoch {
+                let err = slashing_db
+                    .check_and_insert_attestation_signing_root(
+                        &validator.pubkey,
+                        last_signed_attestation_source_epoch - 1,
+                        last_signed_attestation_target_epoch + 1,
+                        Hash256::from_low_u64_be(1),
+                    )
+                    .unwrap_err();
+                assert!(matches!(err, NotSafe::InvalidAttestation(_)));
+            }
+
+            // An attestation from the max source to the next epoch is OK.
+            slashing_db
                 .check_and_insert_attestation_signing_root(
                     &validator.pubkey,
-                    validator.last_signed_attestation_source_epoch - 1,
-                    validator.last_signed_attestation_target_epoch + 1,
+                    last_signed_attestation_source_epoch,
+                    last_signed_attestation_target_epoch + 1,
                     Hash256::from_low_u64_be(1),
                 )
-                .unwrap_err();
-            assert!(matches!(err, NotSafe::InvalidAttestation(_)));
+                .unwrap();
         }
-
-        // An attestation from the max source to the next epoch is OK.
-        slashing_db
-            .check_and_insert_attestation_signing_root(
-                &validator.pubkey,
-                validator.last_signed_attestation_source_epoch,
-                validator.last_signed_attestation_target_epoch + 1,
-                Hash256::from_low_u64_be(1),
-            )
-            .unwrap();
     }
 }
 

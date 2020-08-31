@@ -3,9 +3,9 @@ use types::{Epoch, Slot};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LowerBound {
-    pub block_proposal_slot: Slot,
-    pub attestation_source_epoch: Epoch,
-    pub attestation_target_epoch: Epoch,
+    pub block_proposal_slot: Option<Slot>,
+    pub attestation_source_epoch: Option<Epoch>,
+    pub attestation_target_epoch: Option<Epoch>,
 }
 
 impl LowerBound {
