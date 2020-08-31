@@ -5,14 +5,14 @@ mod state_id;
 use beacon_chain::{BeaconChain, BeaconChainError, BeaconChainTypes};
 use block_id::BlockId;
 use eth2::types::{self as api_types, ValidatorId};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use state_id::StateId;
 use std::borrow::Cow;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch, Slot};
+use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch};
 use warp::Filter;
 
 const API_PREFIX: &str = "eth";
@@ -194,24 +194,18 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
-    #[derive(Serialize, Deserialize)]
-    struct CommitteesQuery {
-        slot: Option<Slot>,
-        index: Option<u64>,
-    }
-
     // beacon/states/{state_id}/committees/{epoch}
     let beacon_state_committees = beacon_states_path
         .clone()
         .and(warp::path("committees"))
         .and(warp::path::param::<Epoch>())
-        .and(warp::query::<CommitteesQuery>())
+        .and(warp::query::<api_types::CommitteesQuery>())
         .and(warp::path::end())
         .and_then(
             |state_id: StateId,
              chain: Arc<BeaconChain<T>>,
              epoch: Epoch,
-             query: CommitteesQuery| {
+             query: api_types::CommitteesQuery| {
                 blocking_json_task(move || {
                     state_id.map_state(&chain, |state| {
                         let relative_epoch =
@@ -284,8 +278,81 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
+    // beacon/headers
+    //
+    // Note: this endpoint only returns information about blocks in the canonical chain. Given that
+    // there's a `canonical` flag on the response, I assume it should also return non-canonical
+    // things. Returning non-canonical things is hard for us since we don't already have a
+    // mechanism for arbitrary forwards block iteration, we only support iterating forwards along
+    // the canonical chain.
+    let beacon_headers = base_path
+        .and(warp::path("beacon"))
+        .and(warp::path("headers"))
+        .and(warp::query::<api_types::HeadersQuery>())
+        .and(chain_filter.clone())
+        .and_then(
+            |query: api_types::HeadersQuery, chain: Arc<BeaconChain<T>>| {
+                blocking_json_task(move || {
+                    let (root, block) = match (query.slot, query.parent_root) {
+                        (None, None) => chain
+                            .head_beacon_block()
+                            .map_err(crate::reject::beacon_chain_error)
+                            .map(|block| (block.canonical_root(), block))?,
+                        (None, Some(parent_root)) => {
+                            let parent = BlockId::from_root(parent_root).block(&chain)?;
+                            let root = chain
+                                .forwards_iter_block_roots(parent.slot())
+                                .map_err(crate::reject::beacon_chain_error)?
+                                .next()
+                                .transpose()
+                                .map_err(crate::reject::beacon_chain_error)?
+                                .map(|(root, _)| root)
+                                .ok_or_else(|| {
+                                    crate::reject::custom_not_found(format!(
+                                        "child of block with root {}",
+                                        parent_root
+                                    ))
+                                })?;
+
+                            BlockId::from_root(root)
+                                .block(&chain)
+                                .map(|block| (root, block))?
+                        }
+                        (Some(slot), parent_root_opt) => {
+                            let root = BlockId::from_slot(slot).root(&chain)?;
+                            let block = BlockId::from_root(root).block(&chain)?;
+
+                            // If the parent root was supplied, check that it matches the block
+                            // obtained via a slot lookup.
+                            if let Some(parent_root) = parent_root_opt {
+                                if block.parent_root() != parent_root {
+                                    return Err(crate::reject::custom_not_found(format!(
+                                        "no canonical block at slot {} with parent root {}",
+                                        slot, parent_root
+                                    )));
+                                }
+                            }
+
+                            (root, block)
+                        }
+                    };
+
+                    let data = api_types::BlockHeaderData {
+                        root,
+                        canonical: true,
+                        header: api_types::BlockHeaderAndSignature {
+                            message: block.message.block_header(),
+                            signature: block.signature.into(),
+                        },
+                    };
+
+                    Ok(api_types::GenericResponse::from(vec![data]))
+                })
+            },
+        );
+
     /*
-     * beacon/blocks
+     * beacon/blocks/{block_id}
      */
 
     let beacon_blocks_path = base_path
@@ -314,8 +381,9 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_state_finality_checkpoints)
         .or(beacon_state_validators)
         .or(beacon_state_validators_id)
-        .or(beacon_block_root)
         .or(beacon_state_committees)
+        .or(beacon_headers)
+        .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

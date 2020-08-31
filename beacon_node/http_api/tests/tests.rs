@@ -449,6 +449,41 @@ impl ApiTester {
         }
     }
 
+    pub async fn test_beacon_headers_all_slots(self) -> Self {
+        for slot in 0..CHAIN_LENGTH {
+            let slot = Slot::from(slot);
+
+            let result = self
+                .client
+                .beacon_headers(Some(slot), None)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let root = self.chain.block_root_at_slot(slot).unwrap();
+
+            if root.is_none() && result.is_none() {
+                continue;
+            }
+
+            let root = root.unwrap();
+            let block = self.chain.block_at_slot(slot).unwrap().unwrap();
+            let header = BlockHeaderData {
+                root,
+                canonical: true,
+                header: BlockHeaderAndSignature {
+                    message: block.message.block_header(),
+                    signature: block.signature.into(),
+                },
+            };
+            let expected = vec![header];
+
+            assert_eq!(result.unwrap(), expected, "slot {:?}", slot);
+        }
+
+        self
+    }
+
     pub async fn test_beacon_blocks_root(self) -> Self {
         for block_id in self.interesting_block_ids() {
             let result = self
@@ -502,6 +537,11 @@ async fn beacon_states_committees() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_states_validator_id() {
     ApiTester::new().test_beacon_states_validator_id().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_headers() {
+    ApiTester::new().test_beacon_headers_all_slots().await;
 }
 
 #[tokio::test(core_threads = 2)]

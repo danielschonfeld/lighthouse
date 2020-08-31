@@ -1,12 +1,20 @@
 use beacon_chain::{BeaconChain, BeaconChainTypes};
 use eth2::types::BlockId as CoreBlockId;
 use std::str::FromStr;
-use types::{Hash256, SignedBeaconBlock};
+use types::{Hash256, SignedBeaconBlock, Slot};
 
 #[derive(Debug)]
 pub struct BlockId(pub CoreBlockId);
 
 impl BlockId {
+    pub fn from_slot(slot: Slot) -> Self {
+        Self(CoreBlockId::Slot(slot))
+    }
+
+    pub fn from_root(root: Hash256) -> Self {
+        Self(CoreBlockId::Root(root))
+    }
+
     pub fn root<T: BeaconChainTypes>(
         &self,
         chain: &BeaconChain<T>,
@@ -28,7 +36,11 @@ impl BlockId {
             CoreBlockId::Slot(slot) => chain
                 .block_root_at_slot(*slot)
                 .map_err(crate::reject::beacon_chain_error)
-                .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found())),
+                .and_then(|root_opt| {
+                    root_opt.ok_or_else(|| {
+                        crate::reject::custom_not_found(format!("beacon block at slot {}", slot))
+                    })
+                }),
             CoreBlockId::Root(root) => Ok(*root),
         }
     }
@@ -41,10 +53,20 @@ impl BlockId {
             CoreBlockId::Head => chain
                 .head_beacon_block()
                 .map_err(crate::reject::beacon_chain_error),
-            _ => chain
-                .get_block(&self.root(chain)?)
-                .map_err(crate::reject::beacon_chain_error)
-                .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found())),
+            _ => {
+                let root = self.root(chain)?;
+                chain
+                    .get_block(&root)
+                    .map_err(crate::reject::beacon_chain_error)
+                    .and_then(|root_opt| {
+                        root_opt.ok_or_else(|| {
+                            crate::reject::custom_not_found(format!(
+                                "beacon block with root {}",
+                                root
+                            ))
+                        })
+                    })
+            }
         }
     }
 }

@@ -3,7 +3,10 @@ use std::fmt;
 use std::str::FromStr;
 use types::serde_utils;
 
-pub use types::{Checkpoint, Epoch, Fork, Hash256, PublicKeyBytes, Slot, Validator};
+pub use types::{
+    BeaconBlockHeader, Checkpoint, Epoch, Fork, Hash256, PublicKeyBytes, SignatureBytes, Slot,
+    Validator,
+};
 
 /// The number of epochs between when a validator is eligible for activation and when they
 /// *usually* enter the activation queue.
@@ -238,6 +241,12 @@ impl ValidatorStatus {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct CommitteesQuery {
+    pub slot: Option<Slot>,
+    pub index: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommitteeData {
     #[serde(with = "serde_utils::quoted")]
@@ -245,4 +254,23 @@ pub struct CommitteeData {
     pub slot: Slot,
     #[serde(with = "serde_utils::quoted_u64_vec")]
     pub validators: Vec<u64>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HeadersQuery {
+    pub slot: Option<Slot>,
+    pub parent_root: Option<Hash256>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlockHeaderAndSignature {
+    pub message: BeaconBlockHeader,
+    pub signature: SignatureBytes,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BlockHeaderData {
+    pub root: Hash256,
+    pub canonical: bool,
+    pub header: BlockHeaderAndSignature,
 }

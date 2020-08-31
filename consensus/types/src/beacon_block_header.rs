@@ -14,6 +14,7 @@ use tree_hash_derive::TreeHash;
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Encode, Decode, TreeHash, TestRandom)]
 pub struct BeaconBlockHeader {
     pub slot: Slot,
+    #[serde(with = "crate::serde_utils::quoted")]
     pub proposer_index: u64,
     pub parent_root: Hash256,
     pub state_root: Hash256,

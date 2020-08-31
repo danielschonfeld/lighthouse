@@ -191,6 +191,34 @@ impl BeaconNodeClient {
         self.get_opt(path).await
     }
 
+    /// `GET beacon/headers?slot,parent_root`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_headers(
+        &self,
+        slot: Option<Slot>,
+        parent_root: Option<u64>,
+    ) -> Result<Option<GenericResponse<Vec<BlockHeaderData>>>, Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("headers");
+
+        if let Some(slot) = slot {
+            path.query_pairs_mut()
+                .append_pair("slot", &slot.to_string());
+        }
+
+        if let Some(root) = parent_root {
+            path.query_pairs_mut()
+                .append_pair("parent_root", &root.to_string());
+        }
+
+        self.get_opt(path).await
+    }
+
     /// `GET beacon/blocks/{block_id}/root`
     ///
     /// Returns `Ok(None)` on a 404 error.
