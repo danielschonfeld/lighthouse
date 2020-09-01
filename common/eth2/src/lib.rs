@@ -34,10 +34,7 @@ impl BeaconNodeClient {
 
     async fn get_opt<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<Option<T>, Error> {
         match self.client.get(url).send().await?.error_for_status() {
-            Ok(resp) => {
-                dbg!(&resp);
-                resp.json().await.map(Option::Some)
-            }
+            Ok(resp) => resp.json().await.map(Option::Some),
             Err(err) => {
                 if err.status() == Some(StatusCode::NOT_FOUND) {
                     Ok(None)

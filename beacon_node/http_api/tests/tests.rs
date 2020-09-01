@@ -2,8 +2,10 @@ use beacon_chain::{
     test_utils::{AttestationStrategy, BeaconChainHarness, BlockStrategy, HarnessType},
     BeaconChain,
 };
+use environment::null_logger;
 use eth2::{types::*, BeaconNodeClient, Url};
-use http_api::Context;
+use http_api::{Config, Context};
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use store::config::StoreConfig;
 use tokio::sync::oneshot;
@@ -78,12 +80,21 @@ impl ApiTester {
         );
 
         let context = Arc::new(Context {
+            config: Config {
+                enabled: true,
+                listen_addr: Ipv4Addr::new(127, 0, 0, 1),
+                listen_port: 0,
+            },
             chain: Some(chain.clone()),
-            listen_address: [127, 0, 0, 1],
-            listen_port: 0,
+            log: null_logger().unwrap(),
         });
         let ctx = context.clone();
-        let (listening_socket, server, server_shutdown) = http_api::serve(ctx).unwrap();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let server_shutdown = async {
+            // It's not really interesting why this triggered, just that it happened.
+            let _ = shutdown_rx.await;
+        };
+        let (listening_socket, server) = http_api::serve(ctx, server_shutdown).unwrap();
 
         tokio::spawn(async { server.await });
 
@@ -100,7 +111,7 @@ impl ApiTester {
         Self {
             chain,
             client,
-            _server_shutdown: server_shutdown,
+            _server_shutdown: shutdown_tx,
         }
     }
 
@@ -538,8 +549,13 @@ impl ApiTester {
             let result = result.unwrap();
             let block = block_opt.unwrap();
             let block_root = block_root_opt.unwrap();
+            let canonical = self
+                .chain
+                .block_root_at_slot(block.slot())
+                .unwrap()
+                .map_or(false, |canonical| block_root == canonical);
 
-            assert!(result.canonical, "{:?}", block_id);
+            assert_eq!(result.canonical, canonical, "{:?}", block_id);
             assert_eq!(result.root, block_root, "{:?}", block_id);
             assert_eq!(
                 result.header.message,

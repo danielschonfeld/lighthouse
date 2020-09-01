@@ -20,3 +20,4 @@ slog = "2.5.2"
 
 [dev-dependencies]
 store = { path = "../store" }
+environment = { path = "../../lighthouse/environment" }

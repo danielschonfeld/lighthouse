@@ -27,7 +27,6 @@ pub struct Context<T: BeaconChainTypes> {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub enabled: bool,
-    pub listen_socket_addr: SocketAddr,
     pub listen_addr: Ipv4Addr,
     pub listen_port: u16,
 }
@@ -36,9 +35,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: false,
-            listen_socket_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 5054).into(),
             listen_addr: Ipv4Addr::new(127, 0, 0, 1),
-            listen_port: 5054,
+            listen_port: 5052,
         }
     }
 }
@@ -314,6 +312,7 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::query::<api_types::HeadersQuery>())
+        .and(warp::path::end())
         .and(chain_filter.clone())
         .and_then(
             |query: api_types::HeadersQuery, chain: Arc<BeaconChain<T>>| {
@@ -388,6 +387,7 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::path::param::<BlockId>())
+        .and(warp::path::end())
         .and(chain_filter.clone())
         .and_then(|block_id: BlockId, chain: Arc<BeaconChain<T>>| {
             blocking_json_task(move || {
