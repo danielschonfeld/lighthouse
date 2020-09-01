@@ -4,8 +4,8 @@ use std::str::FromStr;
 use types::serde_utils;
 
 pub use types::{
-    BeaconBlockHeader, Checkpoint, Epoch, EthSpec, Fork, Hash256, PublicKeyBytes, SignatureBytes,
-    SignedBeaconBlock, Slot, Validator,
+    Attestation, BeaconBlockHeader, Checkpoint, Epoch, EthSpec, Fork, Hash256, PublicKeyBytes,
+    SignatureBytes, SignedBeaconBlock, Slot, Validator,
 };
 
 /// The number of epochs between when a validator is eligible for activation and when they

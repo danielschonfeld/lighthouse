@@ -443,6 +443,20 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
+    // beacon/blocks/{block_id}/attestations
+    let beacon_block_attestations = beacon_blocks_path
+        .clone()
+        .and(warp::path("attestations"))
+        .and(warp::path::end())
+        .and_then(|block_id: BlockId, chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                block_id
+                    .block(&chain)
+                    .map(|block| block.message.body.attestations)
+                    .map(api_types::GenericResponse::from)
+            })
+        });
+
     let routes = beacon_genesis
         .or(beacon_state_root)
         .or(beacon_state_fork)
@@ -453,6 +467,7 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_headers)
         .or(beacon_headers_block_id)
         .or(beacon_block)
+        .or(beacon_block_attestations)
         .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 

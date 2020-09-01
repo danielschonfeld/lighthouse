@@ -240,10 +240,10 @@ impl BeaconNodeClient {
     /// `GET beacon/blocks`
     ///
     /// Returns `Ok(None)` on a 404 error.
-    pub async fn beacon_blocks<E: EthSpec>(
+    pub async fn beacon_blocks<T: EthSpec>(
         &self,
         block_id: BlockId,
-    ) -> Result<Option<GenericResponse<SignedBeaconBlock<E>>>, Error> {
+    ) -> Result<Option<GenericResponse<SignedBeaconBlock<T>>>, Error> {
         let mut path = self.server.clone();
 
         path.path_segments_mut()
@@ -270,6 +270,25 @@ impl BeaconNodeClient {
             .push("blocks")
             .push(&block_id.to_string())
             .push("root");
+
+        self.get_opt(path).await
+    }
+
+    /// `GET beacon/blocks/{block_id}/attestations`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_blocks_attestations<T: EthSpec>(
+        &self,
+        block_id: BlockId,
+    ) -> Result<Option<GenericResponse<Vec<Attestation<T>>>>, Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("blocks")
+            .push(&block_id.to_string())
+            .push("attestations");
 
         self.get_opt(path).await
     }

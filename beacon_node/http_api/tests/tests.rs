@@ -460,6 +460,11 @@ impl ApiTester {
         }
     }
 
+    fn get_block(&self, block_id: BlockId) -> Option<SignedBeaconBlock<E>> {
+        let root = self.get_block_root(block_id);
+        root.and_then(|root| self.chain.get_block(&root).unwrap())
+    }
+
     pub async fn test_beacon_headers_all_slots(self) -> Self {
         for slot in 0..CHAIN_LENGTH {
             let slot = Slot::from(slot);
@@ -600,8 +605,26 @@ impl ApiTester {
                 .unwrap()
                 .map(|res| res.data);
 
-            let root = self.get_block_root(block_id);
-            let expected = root.and_then(|root| self.chain.get_block(&root).unwrap());
+            let expected = self.get_block(block_id);
+
+            assert_eq!(result, expected, "{:?}", block_id);
+        }
+
+        self
+    }
+
+    pub async fn test_beacon_blocks_attestations(self) -> Self {
+        for block_id in self.interesting_block_ids() {
+            let result = self
+                .client
+                .beacon_blocks_attestations(block_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let expected = self
+                .get_block(block_id)
+                .map(|block| block.message.body.attestations.into());
 
             assert_eq!(result, expected, "{:?}", block_id);
         }
@@ -669,4 +692,9 @@ async fn beacon_blocks() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_blocks_root() {
     ApiTester::new().test_beacon_blocks_root().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_blocks_attestations() {
+    ApiTester::new().test_beacon_blocks_attestations().await;
 }
