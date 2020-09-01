@@ -34,7 +34,10 @@ impl BeaconNodeClient {
 
     async fn get_opt<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<Option<T>, Error> {
         match self.client.get(url).send().await?.error_for_status() {
-            Ok(resp) => resp.json().await.map(Option::Some),
+            Ok(resp) => {
+                dbg!(&resp);
+                resp.json().await.map(Option::Some)
+            }
             Err(err) => {
                 if err.status() == Some(StatusCode::NOT_FOUND) {
                     Ok(None)
@@ -225,7 +228,7 @@ impl BeaconNodeClient {
     pub async fn beacon_headers_block_id(
         &self,
         block_id: BlockId,
-    ) -> Result<Option<GenericResponse<Vec<BlockHeaderData>>>, Error> {
+    ) -> Result<Option<GenericResponse<BlockHeaderData>>, Error> {
         let mut path = self.server.clone();
 
         path.path_segments_mut()

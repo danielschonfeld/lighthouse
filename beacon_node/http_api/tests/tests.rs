@@ -30,7 +30,7 @@ const SKIPPED_SLOTS: &[u64] = &[
     FINALIZED_EPOCH * SLOTS_PER_EPOCH,
 ];
 
-pub struct ApiTester {
+struct ApiTester {
     chain: Arc<BeaconChain<HarnessType<E>>>,
     client: BeaconNodeClient,
     _server_shutdown: oneshot::Sender<()>,
@@ -518,6 +518,46 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_beacon_headers_block_id(self) -> Self {
+        for block_id in self.interesting_block_ids() {
+            let result = self
+                .client
+                .beacon_headers_block_id(block_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let block_root_opt = self.get_block_root(block_id);
+
+            let block_opt = block_root_opt.and_then(|root| self.chain.get_block(&root).unwrap());
+
+            if block_opt.is_none() && result.is_none() {
+                continue;
+            }
+
+            let result = result.unwrap();
+            let block = block_opt.unwrap();
+            let block_root = block_root_opt.unwrap();
+
+            assert!(result.canonical, "{:?}", block_id);
+            assert_eq!(result.root, block_root, "{:?}", block_id);
+            assert_eq!(
+                result.header.message,
+                block.message.block_header(),
+                "{:?}",
+                block_id
+            );
+            assert_eq!(
+                result.header.signature,
+                block.signature.into(),
+                "{:?}",
+                block_id
+            );
+        }
+
+        self
+    }
+
     pub async fn test_beacon_blocks_root(self) -> Self {
         for block_id in self.interesting_block_ids() {
             let result = self
@@ -580,6 +620,11 @@ async fn beacon_headers() {
         .await
         .test_beacon_headers_all_parents()
         .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_headers_block_id() {
+    ApiTester::new().test_beacon_headers_block_id().await;
 }
 
 #[tokio::test(core_threads = 2)]
