@@ -5,13 +5,13 @@ mod state_id;
 use beacon_chain::{BeaconChain, BeaconChainError, BeaconChainTypes};
 use block_id::BlockId;
 use eth2::types::{self as api_types, ValidatorId};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use slog::{crit, info, Logger};
 use state_id::StateId;
 use std::borrow::Cow;
 use std::future::Future;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
-use tokio::sync::oneshot;
 use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch};
 use warp::Filter;
 
@@ -19,16 +19,41 @@ const API_PREFIX: &str = "eth";
 const API_VERSION: &str = "v1";
 
 pub struct Context<T: BeaconChainTypes> {
+    pub config: Config,
     pub chain: Option<Arc<BeaconChain<T>>>,
-    pub listen_address: [u8; 4],
+    pub log: Logger,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub enabled: bool,
+    pub listen_socket_addr: SocketAddr,
+    pub listen_addr: Ipv4Addr,
     pub listen_port: u16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            listen_socket_addr: SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 5054).into(),
+            listen_addr: Ipv4Addr::new(127, 0, 0, 1),
+            listen_port: 5054,
+        }
+    }
 }
 
 pub fn serve<T: BeaconChainTypes>(
     ctx: Arc<Context<T>>,
-) -> Result<(SocketAddr, impl Future<Output = ()>, oneshot::Sender<()>), warp::Error> {
-    let listen_address = ctx.listen_address;
-    let listen_port = ctx.listen_port;
+    shutdown: impl Future<Output = ()> + Send + Sync + 'static,
+) -> Result<(SocketAddr, impl Future<Output = ()>), warp::Error> {
+    let config = ctx.config.clone();
+    let log = ctx.log.clone();
+
+    if config.enabled == false {
+        crit!(log, "Cannot start disabled HTTP server");
+        panic!("a disabled server should not be started");
+    }
 
     let base_path = warp::path(API_PREFIX).and(warp::path(API_VERSION));
     let chain_filter = warp::any()
@@ -423,15 +448,21 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 
-    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    // let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(
-        (listen_address, listen_port),
+        SocketAddrV4::new(config.listen_addr, config.listen_port),
         async {
-            shutdown_rx.await.ok();
+            shutdown.await;
         },
     )?;
 
-    Ok((listening_socket, server, shutdown_tx))
+    info!(
+        log,
+        "HTTP API started";
+        "listen_address" => listening_socket.to_string(),
+    );
+
+    Ok((listening_socket, server))
 }
 
 async fn blocking_task<F, T>(func: F) -> T

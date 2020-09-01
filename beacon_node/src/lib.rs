@@ -130,7 +130,8 @@ impl<E: EthSpec> ProductionBeaconNode<E> {
             .build_beacon_chain()?
             .network(&client_config.network)
             .await?
-            .notifier()?;
+            .notifier()?
+            .http_api_config(client_config.http_api.clone());
 
         let builder = if client_config.rest_api.enabled {
             builder.http_server(&client_config, &http_eth2_config, events)?

@@ -67,6 +67,7 @@ pub struct Config {
     pub chain: beacon_chain::ChainConfig,
     pub websocket_server: websocket_server::Config,
     pub eth1: eth1::Config,
+    pub http_api: http_api::Config,
 }
 
 impl Default for Config {
@@ -88,6 +89,7 @@ impl Default for Config {
             eth1: <_>::default(),
             disabled_forks: Vec::new(),
             graffiti: Graffiti::default(),
+            http_api: <_>::default(),
         }
     }
 }

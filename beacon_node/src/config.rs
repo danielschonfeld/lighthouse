@@ -113,6 +113,29 @@ pub fn get_config<E: EthSpec>(
     }
 
     /*
+     * Standard eth2.0 API server
+     *
+     * Note: these "std-http" commands are only whilst the API is in beta. Eventually the existing
+     * HTTP server will be replaced and these flags will disappear.
+     */
+
+    if cli_args.is_present("std-http") {
+        client_config.http_api.enabled = true;
+    }
+
+    if let Some(address) = cli_args.value_of("std-http-address") {
+        client_config.http_api.listen_addr = address
+            .parse::<Ipv4Addr>()
+            .map_err(|_| "std-http-address is not a valid IPv4 address.")?;
+    }
+
+    if let Some(port) = cli_args.value_of("std-http-port") {
+        client_config.http_api.listen_port = port
+            .parse::<u16>()
+            .map_err(|_| "std-http-port is not a valid u16.")?;
+    }
+
+    /*
      * Websocket server
      */
 

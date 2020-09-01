@@ -163,6 +163,29 @@ pub fn cli_app<'a, 'b>() -> App<'a, 'b> {
                 .default_value("")
                 .takes_value(true),
         )
+        /* Standard eth2.0 API related arguments */
+        .arg(
+            Arg::with_name("std-http")
+                .long("std-http")
+                .help("Enable RESTful HTTP API server. Disabled by default.")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("std-http-address")
+                .long("std-http-address")
+                .value_name("ADDRESS")
+                .help("Set the listen address for the RESTful HTTP API server.")
+                .default_value("127.0.0.1")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("std-http-port")
+                .long("std-http2-port")
+                .value_name("PORT")
+                .help("Set the listen TCP port for the RESTful HTTP API server.")
+                .default_value("5052")
+                .takes_value(true),
+        )
         /* Websocket related arguments */
         .arg(
             Arg::with_name("ws")

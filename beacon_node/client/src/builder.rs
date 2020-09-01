@@ -62,6 +62,7 @@ pub struct ClientBuilder<T: BeaconChainTypes> {
     network_globals: Option<Arc<NetworkGlobals<T::EthSpec>>>,
     network_send: Option<UnboundedSender<NetworkMessage<T::EthSpec>>>,
     http_listen_addr: Option<SocketAddr>,
+    http_api_config: http_api::Config,
     websocket_listen_addr: Option<SocketAddr>,
     eth_spec_instance: T::EthSpec,
 }
@@ -104,6 +105,7 @@ where
             network_globals: None,
             network_send: None,
             http_listen_addr: None,
+            http_api_config: <_>::default(),
             websocket_listen_addr: None,
             eth_spec_instance,
         }
@@ -280,6 +282,12 @@ where
         Ok(self)
     }
 
+    /// Provides configuration for the HTTP API.
+    pub fn http_api_config(mut self, config: http_api::Config) -> Self {
+        self.http_api_config = config;
+        self
+    }
+
     /// Immediately starts the beacon node REST API http server.
     pub fn http_server(
         mut self,
@@ -380,19 +388,36 @@ where
             TColdStore,
         >,
     > {
-        let http_api_context = Arc::new(http_api::Context {
-            chain: self.beacon_chain.clone(),
-        });
-        let ctx = http_api_context.clone();
-        self.runtime_context
-            .unwrap()
-            .executor
-            .spawn_without_exit(async move { http_api::serve(ctx).await }, "cats");
+        let http_api_listen_addr = if self.http_api_config.enabled {
+            let ctx = Arc::new(http_api::Context {
+                config: self.http_api_config.clone(),
+                chain: self.beacon_chain.clone(),
+                // TODO
+                log: self.runtime_context.as_ref().unwrap().log().clone(),
+            });
+
+            // TODO
+            let exit = self.runtime_context.as_ref().unwrap().executor.exit();
+
+            let (listen_addr, server) = http_api::serve(ctx, exit)
+                .map_err(|e| format!("Unable to start HTTP API server: {:?}", e))
+                .unwrap(); // TODO
+
+            self.runtime_context
+                .unwrap()
+                .executor
+                .spawn_without_exit(async move { server.await }, "http-api");
+
+            Some(listen_addr)
+        } else {
+            None
+        };
 
         Client {
             beacon_chain: self.beacon_chain,
             network_globals: self.network_globals,
             http_listen_addr: self.http_listen_addr,
+            http_api_listen_addr,
             websocket_listen_addr: self.websocket_listen_addr,
         }
     }

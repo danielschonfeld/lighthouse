@@ -24,6 +24,8 @@ pub struct Client<T: BeaconChainTypes> {
     beacon_chain: Option<Arc<BeaconChain<T>>>,
     network_globals: Option<Arc<NetworkGlobals<T::EthSpec>>>,
     http_listen_addr: Option<SocketAddr>,
+    /// Listen address for the standard eth2.0 API, if the service was started.
+    http_api_listen_addr: Option<SocketAddr>,
     websocket_listen_addr: Option<SocketAddr>,
 }
 
@@ -36,6 +38,11 @@ impl<T: BeaconChainTypes> Client<T> {
     /// Returns the address of the client's HTTP API server, if it was started.
     pub fn http_listen_addr(&self) -> Option<SocketAddr> {
         self.http_listen_addr
+    }
+
+    /// Returns the address of the client's standard eth2.0 API server, if it was started.
+    pub fn http_api_listen_addr(&self) -> Option<SocketAddr> {
+        self.http_api_listen_addr
     }
 
     /// Returns the address of the client's WebSocket API server, if it was started.
