@@ -99,34 +99,3 @@ impl Interchange {
         Ok(Interchange { metadata, data })
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    // FIXME(sproul): update and add more parsing tests
-    // FIXME(sproul): add update max tests
-    #[test]
-    fn minimal_example() {
-        let interchange_json = r#"
-            {
-                "metadata": {
-                    "interchange_format": "minimal",
-                    "interchange_format_version": "2",
-                    "genesis_validators_root": "0x04700007fabc8282644aed6d1c7c9e21d38a03a0c4ba193f3afe428824b3a673"
-                },
-                "data": [
-                    {
-                        "pubkey": "0xb845089a1457f811bfc000588fbb4e713669be8ce060ea6be3c6ece09afc3794106c91ca73acda5e5457122d58723bed",
-                        "last_signed_block_slot": "89765",
-                        "last_signed_attestation_source_epoch": "2990",
-                        "last_signed_attestation_target_epoch": "3007"
-                    }
-                ]
-            }
-        "#;
-        let interchange = Interchange::from_json_str(interchange_json).unwrap();
-        println!("{:#?}", interchange);
-        println!("{}", serde_json::to_string_pretty(&interchange).unwrap());
-    }
-}

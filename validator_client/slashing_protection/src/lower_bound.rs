@@ -34,3 +34,5 @@ impl LowerBound {
         })
     }
 }
+
+// FIXME(sproul): check update behaviour
