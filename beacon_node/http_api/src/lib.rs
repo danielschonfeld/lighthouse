@@ -422,6 +422,13 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path::param::<BlockId>())
         .and(chain_filter.clone());
 
+    // beacon/blocks/{block_id}
+    let beacon_block = beacon_blocks_path.clone().and(warp::path::end()).and_then(
+        |block_id: BlockId, chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || block_id.block(&chain).map(api_types::GenericResponse::from))
+        },
+    );
+
     // beacon/blocks/{block_id}/root
     let beacon_block_root = beacon_blocks_path
         .clone()
@@ -445,6 +452,7 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_state_committees)
         .or(beacon_headers)
         .or(beacon_headers_block_id)
+        .or(beacon_block)
         .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 

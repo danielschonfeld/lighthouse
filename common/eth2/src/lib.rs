@@ -237,6 +237,24 @@ impl BeaconNodeClient {
         self.get_opt(path).await
     }
 
+    /// `GET beacon/blocks`
+    ///
+    /// Returns `Ok(None)` on a 404 error.
+    pub async fn beacon_blocks<E: EthSpec>(
+        &self,
+        block_id: BlockId,
+    ) -> Result<Option<GenericResponse<SignedBeaconBlock<E>>>, Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("blocks")
+            .push(&block_id.to_string());
+
+        self.get_opt(path).await
+    }
+
     /// `GET beacon/blocks/{block_id}/root`
     ///
     /// Returns `Ok(None)` on a 404 error.

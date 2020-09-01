@@ -590,6 +590,24 @@ impl ApiTester {
 
         self
     }
+
+    pub async fn test_beacon_blocks(self) -> Self {
+        for block_id in self.interesting_block_ids() {
+            let result = self
+                .client
+                .beacon_blocks(block_id)
+                .await
+                .unwrap()
+                .map(|res| res.data);
+
+            let root = self.get_block_root(block_id);
+            let expected = root.and_then(|root| self.chain.get_block(&root).unwrap());
+
+            assert_eq!(result, expected, "{:?}", block_id);
+        }
+
+        self
+    }
 }
 
 #[tokio::test(core_threads = 2)]
@@ -641,6 +659,11 @@ async fn beacon_headers() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_headers_block_id() {
     ApiTester::new().test_beacon_headers_block_id().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_blocks() {
+    ApiTester::new().test_beacon_blocks().await;
 }
 
 #[tokio::test(core_threads = 2)]
