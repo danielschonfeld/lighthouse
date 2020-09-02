@@ -86,8 +86,8 @@ pub fn serve<T: BeaconChainTypes>(
 
     let log_filter = warp::any().map(move || ctx.log.clone());
 
-    // beacon/genesis
-    let beacon_genesis = eth1_v1
+    // GET beacon/genesis
+    let get_beacon_genesis = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("genesis"))
         .and(warp::path::end())
@@ -116,8 +116,8 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path::param::<StateId>())
         .and(chain_filter.clone());
 
-    // beacon/states/{state_id}/root
-    let beacon_state_root = beacon_states_path
+    // GET beacon/states/{state_id}/root
+    let get_beacon_state_root = beacon_states_path
         .clone()
         .and(warp::path("root"))
         .and(warp::path::end())
@@ -130,8 +130,8 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    // beacon/states/{state_id}/fork
-    let beacon_state_fork = beacon_states_path
+    // GET beacon/states/{state_id}/fork
+    let get_beacon_state_fork = beacon_states_path
         .clone()
         .and(warp::path("fork"))
         .and(warp::path::end())
@@ -139,9 +139,8 @@ pub fn serve<T: BeaconChainTypes>(
             blocking_json_task(move || state_id.fork(&chain).map(api_types::GenericResponse::from))
         });
 
-    // beacon/states/{state_id}/finality_checkpoints
-    //let beacon_state_finality_checkpoints = beacon_states_path
-    let beacon_state_finality_checkpoints = warp::any()
+    // GET beacon/states/{state_id}/finality_checkpoints
+    let get_beacon_state_finality_checkpoints = warp::any()
         .and(warp::path(API_PREFIX))
         .and(warp::path(API_VERSION))
         .and(warp::path("beacon"))
@@ -165,8 +164,8 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    // beacon/states/{state_id}/validators
-    let beacon_state_validators = beacon_states_path
+    // GET beacon/states/{state_id}/validators
+    let get_beacon_state_validators = beacon_states_path
         .clone()
         .and(warp::path("validators"))
         .and(warp::path::end())
@@ -200,8 +199,8 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    // beacon/states/{state_id}/validators/{validator_id}
-    let beacon_state_validators_id = beacon_states_path
+    // GET beacon/states/{state_id}/validators/{validator_id}
+    let get_beacon_state_validators_id = beacon_states_path
         .clone()
         .and(warp::path("validators"))
         .and(warp::path::param::<ValidatorId>())
@@ -245,8 +244,8 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
-    // beacon/states/{state_id}/committees/{epoch}
-    let beacon_state_committees = beacon_states_path
+    // GET beacon/states/{state_id}/committees/{epoch}
+    let get_beacon_state_committees = beacon_states_path
         .clone()
         .and(warp::path("committees"))
         .and(warp::path::param::<Epoch>())
@@ -329,14 +328,14 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
-    // beacon/headers
+    // GET beacon/headers
     //
     // Note: this endpoint only returns information about blocks in the canonical chain. Given that
     // there's a `canonical` flag on the response, I assume it should also return non-canonical
     // things. Returning non-canonical things is hard for us since we don't already have a
     // mechanism for arbitrary forwards block iteration, we only support iterating forwards along
     // the canonical chain.
-    let beacon_headers = eth1_v1
+    let get_beacon_headers = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::query::<api_types::HeadersQuery>())
@@ -410,8 +409,8 @@ pub fn serve<T: BeaconChainTypes>(
             },
         );
 
-    // beacon/headers/{block_id}
-    let beacon_headers_block_id = eth1_v1
+    // GET beacon/headers/{block_id}
+    let get_beacon_headers_block_id = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::path::param::<BlockId>())
@@ -444,8 +443,7 @@ pub fn serve<T: BeaconChainTypes>(
      * beacon/blocks
      */
 
-    // beacon/blocks/{block_id}
-    //let post_beacon_blocks = post_eth1_v1
+    // POST beacon/blocks/{block_id}
     let post_beacon_blocks = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("blocks"))
@@ -501,15 +499,15 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path::param::<BlockId>())
         .and(chain_filter.clone());
 
-    // beacon/blocks/{block_id}
-    let beacon_block = beacon_blocks_path.clone().and(warp::path::end()).and_then(
+    // GET beacon/blocks/{block_id}
+    let get_beacon_block = beacon_blocks_path.clone().and(warp::path::end()).and_then(
         |block_id: BlockId, chain: Arc<BeaconChain<T>>| {
             blocking_json_task(move || block_id.block(&chain).map(api_types::GenericResponse::from))
         },
     );
 
-    // beacon/blocks/{block_id}/root
-    let beacon_block_root = beacon_blocks_path
+    // GET beacon/blocks/{block_id}/root
+    let get_beacon_block_root = beacon_blocks_path
         .clone()
         .and(warp::path("root"))
         .and(warp::path::end())
@@ -522,8 +520,8 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    // beacon/blocks/{block_id}/attestations
-    let beacon_block_attestations = beacon_blocks_path
+    // GET beacon/blocks/{block_id}/attestations
+    let get_beacon_block_attestations = beacon_blocks_path
         .clone()
         .and(warp::path("attestations"))
         .and(warp::path::end())
@@ -536,19 +534,80 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    let routes = beacon_genesis
-        .or(beacon_state_root)
-        .or(beacon_state_fork)
-        .or(beacon_state_finality_checkpoints)
-        .or(beacon_state_validators)
-        .or(beacon_state_validators_id)
-        .or(beacon_state_committees)
-        .or(beacon_headers)
-        .or(beacon_headers_block_id)
+    /*
+     * beacon/pool
+     */
+
+    let beacon_pool_path = eth1_v1
+        .and(warp::path("beacon"))
+        .and(warp::path("pool"))
+        .and(chain_filter.clone());
+
+    // GET beacon/pool/attestations
+    let get_beacon_pool_attestations = beacon_pool_path
+        .clone()
+        .and(warp::path("attestations"))
+        .and(warp::path::end())
+        .and_then(|chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                let attestations = chain.op_pool.get_all_attestations();
+                Ok(api_types::GenericResponse::from(attestations))
+            })
+        });
+
+    // GET beacon/pool/attester_slashings
+    let get_beacon_pool_attester_slashings = beacon_pool_path
+        .clone()
+        .and(warp::path("attester_slashings"))
+        .and(warp::path::end())
+        .and_then(|chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                let attestations = chain.op_pool.get_all_attester_slashings();
+                Ok(api_types::GenericResponse::from(attestations))
+            })
+        });
+
+    // GET beacon/pool/proposer_slashings
+    let get_beacon_pool_proposer_slashings = beacon_pool_path
+        .clone()
+        .and(warp::path("proposer_slashings"))
+        .and(warp::path::end())
+        .and_then(|chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                let attestations = chain.op_pool.get_all_proposer_slashings();
+                Ok(api_types::GenericResponse::from(attestations))
+            })
+        });
+
+    // GET beacon/pool/voluntary_exits
+    let get_beacon_pool_voluntary_exits = beacon_pool_path
+        .clone()
+        .and(warp::path("voluntary_exits"))
+        .and(warp::path::end())
+        .and_then(|chain: Arc<BeaconChain<T>>| {
+            blocking_json_task(move || {
+                let attestations = chain.op_pool.get_all_voluntary_exits();
+                Ok(api_types::GenericResponse::from(attestations))
+            })
+        });
+
+    let routes = get_beacon_genesis
+        .or(get_beacon_state_root)
+        .or(get_beacon_state_fork)
+        .or(get_beacon_state_finality_checkpoints)
+        .or(get_beacon_state_validators)
+        .or(get_beacon_state_validators_id)
+        .or(get_beacon_state_committees)
+        .or(get_beacon_headers)
+        .or(get_beacon_headers_block_id)
         .or(post_beacon_blocks)
-        .or(beacon_block)
-        .or(beacon_block_attestations)
-        .or(beacon_block_root)
+        .or(get_beacon_block)
+        .or(get_beacon_block_attestations)
+        .or(get_beacon_block_root)
+        .or(get_beacon_pool_attestations)
+        .or(get_beacon_pool_attester_slashings)
+        .or(get_beacon_pool_proposer_slashings)
+        .or(get_beacon_pool_voluntary_exits)
         .recover(crate::reject::handle_rejection);
 
     let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(

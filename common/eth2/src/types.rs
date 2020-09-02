@@ -4,8 +4,9 @@ use std::str::FromStr;
 use types::serde_utils;
 
 pub use types::{
-    Attestation, BeaconBlockHeader, Checkpoint, Epoch, EthSpec, Fork, Hash256, PublicKeyBytes,
-    SignatureBytes, SignedBeaconBlock, Slot, Validator,
+    Attestation, AttesterSlashing, BeaconBlockHeader, Checkpoint, Epoch, EthSpec, Fork, Hash256,
+    ProposerSlashing, PublicKeyBytes, SignatureBytes, SignedBeaconBlock, SignedVoluntaryExit, Slot,
+    Validator,
 };
 
 /// An API error serializable to JSON.

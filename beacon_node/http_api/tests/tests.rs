@@ -213,7 +213,7 @@ impl ApiTester {
     }
 
     pub async fn test_beacon_genesis(self) -> Self {
-        let result = self.client.beacon_genesis().await.unwrap().data;
+        let result = self.client.get_beacon_genesis().await.unwrap().data;
 
         let state = self.chain.head().unwrap().beacon_state;
         let expected = GenesisData {
@@ -231,7 +231,7 @@ impl ApiTester {
         for state_id in self.interesting_state_ids() {
             let result = self
                 .client
-                .beacon_states_root(state_id)
+                .get_beacon_states_root(state_id)
                 .await
                 .unwrap()
                 .map(|res| res.data.root);
@@ -275,7 +275,7 @@ impl ApiTester {
         for state_id in self.interesting_state_ids() {
             let result = self
                 .client
-                .beacon_states_fork(state_id)
+                .get_beacon_states_fork(state_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -292,7 +292,7 @@ impl ApiTester {
         for state_id in self.interesting_state_ids() {
             let result = self
                 .client
-                .beacon_states_finality_checkpoints(state_id)
+                .get_beacon_states_finality_checkpoints(state_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -315,7 +315,7 @@ impl ApiTester {
         for state_id in self.interesting_state_ids() {
             let result = self
                 .client
-                .beacon_states_validators(state_id)
+                .get_beacon_states_validators(state_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -369,7 +369,7 @@ impl ApiTester {
                 for validator_id in validator_ids {
                     let result = self
                         .client
-                        .beacon_states_validator_id(state_id, validator_id)
+                        .get_beacon_states_validator_id(state_id, validator_id)
                         .await
                         .unwrap()
                         .map(|res| res.data);
@@ -417,7 +417,7 @@ impl ApiTester {
 
             let results = self
                 .client
-                .beacon_states_committees(state_id, epoch, None, None)
+                .get_beacon_states_committees(state_id, epoch, None, None)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -482,7 +482,7 @@ impl ApiTester {
 
             let result = self
                 .client
-                .beacon_headers(Some(slot), None)
+                .get_beacon_headers(Some(slot), None)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -532,7 +532,7 @@ impl ApiTester {
 
             let result = self
                 .client
-                .beacon_headers(None, Some(parent_root))
+                .get_beacon_headers(None, Some(parent_root))
                 .await
                 .unwrap()
                 .unwrap()
@@ -549,7 +549,7 @@ impl ApiTester {
         for block_id in self.interesting_block_ids() {
             let result = self
                 .client
-                .beacon_headers_block_id(block_id)
+                .get_beacon_headers_block_id(block_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -594,7 +594,7 @@ impl ApiTester {
         for block_id in self.interesting_block_ids() {
             let result = self
                 .client
-                .beacon_blocks_root(block_id)
+                .get_beacon_blocks_root(block_id)
                 .await
                 .unwrap()
                 .map(|res| res.data.root);
@@ -638,7 +638,7 @@ impl ApiTester {
         for block_id in self.interesting_block_ids() {
             let result = self
                 .client
-                .beacon_blocks(block_id)
+                .get_beacon_blocks(block_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -655,7 +655,7 @@ impl ApiTester {
         for block_id in self.interesting_block_ids() {
             let result = self
                 .client
-                .beacon_blocks_attestations(block_id)
+                .get_beacon_blocks_attestations(block_id)
                 .await
                 .unwrap()
                 .map(|res| res.data);
@@ -666,6 +666,66 @@ impl ApiTester {
 
             assert_eq!(result, expected, "{:?}", block_id);
         }
+
+        self
+    }
+
+    pub async fn test_beacon_pool_attestations(self) -> Self {
+        let result = self
+            .client
+            .get_beacon_pool_attestations()
+            .await
+            .unwrap()
+            .data;
+
+        let expected = self.chain.op_pool.get_all_attestations();
+
+        assert_eq!(result, expected);
+
+        self
+    }
+
+    pub async fn test_beacon_pool_attester_slashings(self) -> Self {
+        let result = self
+            .client
+            .get_beacon_pool_attester_slashings()
+            .await
+            .unwrap()
+            .data;
+
+        let expected = self.chain.op_pool.get_all_attester_slashings();
+
+        assert_eq!(result, expected);
+
+        self
+    }
+
+    pub async fn test_beacon_pool_proposer_slashings(self) -> Self {
+        let result = self
+            .client
+            .get_beacon_pool_proposer_slashings()
+            .await
+            .unwrap()
+            .data;
+
+        let expected = self.chain.op_pool.get_all_proposer_slashings();
+
+        assert_eq!(result, expected);
+
+        self
+    }
+
+    pub async fn test_beacon_pool_voluntary_exits(self) -> Self {
+        let result = self
+            .client
+            .get_beacon_pool_voluntary_exits()
+            .await
+            .unwrap()
+            .data;
+
+        let expected = self.chain.op_pool.get_all_voluntary_exits();
+
+        assert_eq!(result, expected);
 
         self
     }
@@ -745,4 +805,17 @@ async fn beacon_blocks_root() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_blocks_attestations() {
     ApiTester::new().test_beacon_blocks_attestations().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_get() {
+    ApiTester::new()
+        .test_beacon_pool_attestations()
+        .await
+        .test_beacon_pool_attester_slashings()
+        .await
+        .test_beacon_pool_proposer_slashings()
+        .await
+        .test_beacon_pool_voluntary_exits()
+        .await;
 }
