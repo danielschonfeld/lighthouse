@@ -37,6 +37,7 @@ const SKIPPED_SLOTS: &[u64] = &[
 struct ApiTester {
     chain: Arc<BeaconChain<HarnessType<E>>>,
     client: BeaconNodeClient,
+    next_block: SignedBeaconBlock<E>,
     _server_shutdown: oneshot::Sender<()>,
     network_rx: mpsc::UnboundedReceiver<NetworkMessage<E>>,
 }
@@ -64,6 +65,8 @@ impl ApiTester {
 
             harness.advance_slot();
         }
+
+        let (next_block, _next_state) = harness.get_block();
 
         let chain = Arc::new(harness.chain);
 
@@ -117,6 +120,7 @@ impl ApiTester {
         Self {
             chain,
             client,
+            next_block,
             _server_shutdown: shutdown_tx,
             network_rx,
         }
@@ -603,6 +607,33 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_post_beacon_blocks_valid(mut self) -> Self {
+        let next_block = self.next_block.clone();
+
+        self.client.post_beacon_blocks(next_block).await.unwrap();
+
+        assert!(
+            self.network_rx.try_recv().is_ok(),
+            "valid blocks should be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_post_beacon_blocks_invalid(mut self) -> Self {
+        let mut next_block = self.next_block.clone();
+        next_block.message.proposer_index += 1;
+
+        assert!(self.client.post_beacon_blocks(next_block).await.is_err());
+
+        assert!(
+            self.network_rx.try_recv().is_ok(),
+            "invalid blocks should be sent to network"
+        );
+
+        self
+    }
+
     pub async fn test_beacon_blocks(self) -> Self {
         for block_id in self.interesting_block_ids() {
             let result = self
@@ -694,6 +725,16 @@ async fn beacon_headers_block_id() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_blocks() {
     ApiTester::new().test_beacon_blocks().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn post_beacon_blocks_valid() {
+    ApiTester::new().test_post_beacon_blocks_valid().await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn post_beacon_blocks_invalid() {
+    ApiTester::new().test_post_beacon_blocks_invalid().await;
 }
 
 #[tokio::test(core_threads = 2)]
