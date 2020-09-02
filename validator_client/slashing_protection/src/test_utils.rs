@@ -74,6 +74,16 @@ impl<T> Default for StreamTest<T> {
     }
 }
 
+impl<T> StreamTest<T> {
+    /// The number of test cases that are expected to pass processing successfully.
+    fn num_expected_successes(&self) -> usize {
+        self.cases
+            .iter()
+            .filter(|case| case.expected.is_ok())
+            .count()
+    }
+}
+
 impl StreamTest<AttestationData> {
     pub fn run(&self) {
         let dir = tempdir().unwrap();
@@ -93,7 +103,7 @@ impl StreamTest<AttestationData> {
             );
         }
 
-        roundtrip_database(&dir, &slashing_db);
+        roundtrip_database(&dir, &slashing_db, self.num_expected_successes() == 0);
     }
 }
 
@@ -116,11 +126,11 @@ impl StreamTest<BeaconBlockHeader> {
             );
         }
 
-        roundtrip_database(&dir, &slashing_db);
+        roundtrip_database(&dir, &slashing_db, self.num_expected_successes() == 0);
     }
 }
 
-fn roundtrip_database(dir: &TempDir, db: &SlashingDatabase) {
+fn roundtrip_database(dir: &TempDir, db: &SlashingDatabase, is_empty: bool) {
     let exported = db
         .export_interchange_info(DEFAULT_GENESIS_VALIDATORS_ROOT)
         .unwrap();
@@ -134,4 +144,5 @@ fn roundtrip_database(dir: &TempDir, db: &SlashingDatabase) {
         .unwrap();
 
     assert_eq!(exported, reexported);
+    assert_eq!(is_empty, exported.len() == 0);
 }

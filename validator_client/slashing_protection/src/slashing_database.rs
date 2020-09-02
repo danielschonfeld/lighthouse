@@ -1,6 +1,7 @@
 use crate::interchange::{
     CompleteInterchangeData, Interchange, InterchangeData, InterchangeFormat, InterchangeMetadata,
-    SignedAttestation as InterchangeAttestation, SignedBlock as InterchangeBlock,
+    MinimalInterchangeData, SignedAttestation as InterchangeAttestation,
+    SignedBlock as InterchangeBlock,
 };
 use crate::lower_bound::LowerBound;
 use crate::signed_attestation::InvalidAttestation;
@@ -700,14 +701,15 @@ impl SlashingDatabase {
                 .0
                 .push(signed_block);
             Ok(())
-        })?;
+        })?
+        .collect::<Result<_, InterchangeError>>()?;
 
         txn.prepare(
             "SELECT public_key, source_epoch, target_epoch, signing_root
              FROM signed_attestations, validators
              WHERE signed_attestations.validator_id = validators.id",
         )?
-        .query_and_then(params![], |row| -> Result<_, InterchangeError> {
+        .query_and_then(params![], |row| {
             let validator_pubkey: String = row.get(0)?;
             let source_epoch = row.get(1)?;
             let target_epoch = row.get(2)?;
@@ -722,7 +724,8 @@ impl SlashingDatabase {
                 .1
                 .push(signed_attestation);
             Ok(())
-        })?;
+        })?
+        .collect::<Result<_, InterchangeError>>()?;
 
         let metadata = InterchangeMetadata {
             interchange_format: InterchangeFormat::Complete,
@@ -732,17 +735,103 @@ impl SlashingDatabase {
 
         let data = InterchangeData::Complete(
             data.into_iter()
-                .flat_map(|(pubkey, (signed_blocks, signed_attestations))| {
-                    Some(CompleteInterchangeData {
-                        pubkey: serde_json::from_str(&pubkey).ok()?,
+                .map(|(pubkey, (signed_blocks, signed_attestations))| {
+                    Ok(CompleteInterchangeData {
+                        pubkey: pubkey_from_str(&pubkey)?,
                         signed_blocks,
                         signed_attestations,
                     })
                 })
-                .collect(),
+                .collect::<Result<_, InterchangeError>>()?,
         );
 
         Ok(Interchange { metadata, data })
+    }
+
+    pub fn export_minimal_interchange_info(
+        &self,
+        genesis_validators_root: Hash256,
+    ) -> Result<Interchange, InterchangeError> {
+        use std::collections::BTreeMap;
+
+        let mut conn = self.conn_pool.get()?;
+        let txn = conn.transaction()?;
+
+        // Select MIN(id) to work around duplicate validator ID bug (see #1544)
+        let mut validator_data = txn
+            .prepare("SELECT public_key, MIN(id) FROM validators GROUP BY public_key")?
+            .query_and_then(params![], |row| {
+                let validator_pubkey: String = row.get(0)?;
+                let validator_id: i64 = row.get(1)?;
+                Ok((validator_pubkey, (validator_id, LowerBound::default())))
+            })?
+            .collect::<Result<BTreeMap<_, _>, InterchangeError>>()?;
+
+        for (validator_id, lower_bound) in validator_data.values_mut() {
+            // Incorporate the data from the signed_attestations and signed_blocks tables.
+            let block_proposal_slot = self.get_max_block_slot(&txn, *validator_id)?;
+            let (attestation_source_epoch, attestation_target_epoch) =
+                self.get_max_source_and_target_epochs(&txn, *validator_id)?;
+
+            *lower_bound = lower_bound.update(LowerBound {
+                block_proposal_slot,
+                attestation_source_epoch,
+                attestation_target_epoch,
+            });
+
+            // Incorporate the data from the lower_bounds table.
+            if let Some(db_lower_bound) = self.get_lower_bound(&txn, *validator_id)? {
+                *lower_bound = lower_bound.update(db_lower_bound);
+            }
+        }
+
+        let metadata = InterchangeMetadata {
+            interchange_format: InterchangeFormat::Minimal,
+            interchange_format_version: SUPPORTED_INTERCHANGE_FORMAT_VERSION,
+            genesis_validators_root,
+        };
+        let data = InterchangeData::Minimal(
+            validator_data
+                .into_iter()
+                .map(|(pubkey, (_, lower_bound))| {
+                    Ok(MinimalInterchangeData {
+                        pubkey: pubkey_from_str(&pubkey)?,
+                        last_signed_block_slot: lower_bound.block_proposal_slot,
+                        last_signed_attestation_source_epoch: lower_bound.attestation_source_epoch,
+                        last_signed_attestation_target_epoch: lower_bound.attestation_target_epoch,
+                    })
+                })
+                .collect::<Result<_, InterchangeError>>()?,
+        );
+        Ok(Interchange { metadata, data })
+    }
+
+    /// Get the max block slot for a validator.
+    fn get_max_block_slot(
+        &self,
+        txn: &Transaction,
+        validator_id: i64,
+    ) -> Result<Option<Slot>, NotSafe> {
+        Ok(txn.query_row(
+            "SELECT MAX(slot) FROM signed_blocks WHERE validator_id = ?1",
+            params![validator_id],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Get the max source and target epochs for a validator.
+    fn get_max_source_and_target_epochs(
+        &self,
+        txn: &Transaction,
+        validator_id: i64,
+    ) -> Result<(Option<Epoch>, Option<Epoch>), NotSafe> {
+        Ok(txn.query_row(
+            "SELECT MAX(source_epoch), MAX(target_epoch)
+             FROM signed_attestations
+             WHERE validator_id = ?1",
+            params![validator_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?)
     }
 
     pub fn num_validator_rows(&self) -> Result<u32, NotSafe> {
@@ -755,6 +844,11 @@ impl SlashingDatabase {
     }
 }
 
+// XXX: this is quite hacky
+fn pubkey_from_str(s: &str) -> Result<PublicKey, serde_json::Error> {
+    serde_json::from_str(&format!("\"{}\"", s))
+}
+
 #[derive(Debug)]
 pub enum InterchangeError {
     UnsupportedVersion(u64),
@@ -765,6 +859,7 @@ pub enum InterchangeError {
     MinimalAttestationSourceAndTargetInconsistent,
     SQLError(String),
     SQLPoolError(r2d2::Error),
+    SerdeJsonError(serde_json::Error),
     NotSafe(NotSafe),
 }
 
@@ -783,6 +878,12 @@ impl From<rusqlite::Error> for InterchangeError {
 impl From<r2d2::Error> for InterchangeError {
     fn from(error: r2d2::Error) -> Self {
         InterchangeError::SQLPoolError(error)
+    }
+}
+
+impl From<serde_json::Error> for InterchangeError {
+    fn from(error: serde_json::Error) -> Self {
+        InterchangeError::SerdeJsonError(error)
     }
 }
 

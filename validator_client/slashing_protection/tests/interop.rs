@@ -25,6 +25,12 @@ fn minimal_import_valid() {
         slashing_db
             .import_interchange_info(&interchange, interchange.metadata.genesis_validators_root)
             .unwrap();
+
+        let reexported = slashing_db
+            .export_minimal_interchange_info(interchange.metadata.genesis_validators_root)
+            .unwrap();
+
+        assert!(interchange.equiv(&reexported));
     }
 }
 

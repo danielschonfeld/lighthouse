@@ -1,4 +1,6 @@
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::iter::FromIterator;
 use types::{Epoch, Hash256, PublicKey, Slot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
@@ -17,7 +19,7 @@ pub struct InterchangeMetadata {
     pub genesis_validators_root: Hash256,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MinimalInterchangeData {
     pub pubkey: PublicKey,
@@ -26,7 +28,7 @@ pub struct MinimalInterchangeData {
     pub last_signed_attestation_target_epoch: Option<Epoch>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompleteInterchangeData {
     pub pubkey: PublicKey,
@@ -34,14 +36,14 @@ pub struct CompleteInterchangeData {
     pub signed_attestations: Vec<SignedAttestation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedBlock {
     pub slot: Slot,
     pub signing_root: Option<Hash256>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedAttestation {
     pub source_epoch: Epoch,
@@ -97,5 +99,30 @@ impl Interchange {
             }
         };
         Ok(Interchange { metadata, data })
+    }
+
+    /// Do these two `Interchange`s contain the same data (ignoring ordering)?
+    pub fn equiv(&self, other: &Self) -> bool {
+        match (&self.data, &other.data) {
+            (InterchangeData::Minimal(m1), InterchangeData::Minimal(m2)) => {
+                let m1_set = HashSet::<_>::from_iter(m1.iter());
+                let m2_set = HashSet::<_>::from_iter(m2.iter());
+                self.metadata == other.metadata && m1_set == m2_set
+            }
+            (InterchangeData::Complete(c1), InterchangeData::Complete(c2)) => {
+                let c1_set = HashSet::<_>::from_iter(c1.iter());
+                let c2_set = HashSet::<_>::from_iter(c2.iter());
+                self.metadata == other.metadata && c1_set == c2_set
+            }
+            _ => false,
+        }
+    }
+
+    /// The number of entries in `data`.
+    pub fn len(&self) -> usize {
+        match &self.data {
+            InterchangeData::Minimal(m) => m.len(),
+            InterchangeData::Complete(c) => c.len(),
+        }
     }
 }
