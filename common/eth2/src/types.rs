@@ -117,7 +117,7 @@ impl fmt::Display for StateId {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + serde::de::DeserializeOwned")]
 pub struct GenericResponse<T: Serialize + serde::de::DeserializeOwned> {
     pub data: T,

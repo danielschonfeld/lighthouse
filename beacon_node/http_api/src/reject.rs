@@ -30,6 +30,24 @@ pub fn custom_bad_request(msg: String) -> warp::reject::Rejection {
     warp::reject::custom(CustomBadRequest(msg))
 }
 
+#[derive(Debug)]
+pub struct CustomServerError(pub String);
+
+impl Reject for CustomServerError {}
+
+pub fn custom_server_error(msg: String) -> warp::reject::Rejection {
+    warp::reject::custom(CustomServerError(msg))
+}
+
+#[derive(Debug)]
+pub struct BlockFailedValidation(pub String);
+
+impl Reject for BlockFailedValidation {}
+
+pub fn block_failed_validation(msg: String) -> warp::reject::Rejection {
+    warp::reject::custom(BlockFailedValidation(msg))
+}
+
 /// An API error serializable to JSON.
 #[derive(Serialize)]
 struct ErrorMessage {
@@ -76,6 +94,16 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     } else if let Some(e) = err.find::<crate::reject::CustomBadRequest>() {
         code = StatusCode::BAD_REQUEST;
         message = format!("BAD_REQUEST: {}", e.0);
+    } else if let Some(e) = err.find::<crate::reject::CustomServerError>() {
+        code = StatusCode::INTERNAL_SERVER_ERROR;
+        message = format!("INTERNAL_SERVER_ERROR: {}", e.0);
+    } else if let Some(e) = err.find::<crate::reject::BlockFailedValidation>() {
+        code = StatusCode::ACCEPTED;
+        message = format!(
+            "ACCEPTED: The block failed validation, but was successfully broadcast anyway. \
+            It was not integrated into the beacon node database: {}",
+            e.0
+        );
     } else {
         // We should have expected this... Just log and say its a 500
         eprintln!("unhandled rejection: {:?}", err);

@@ -392,6 +392,7 @@ where
             let ctx = Arc::new(http_api::Context {
                 config: self.http_api_config.clone(),
                 chain: self.beacon_chain.clone(),
+                network_tx: self.network_send.clone(),
                 // TODO
                 log: self.runtime_context.as_ref().unwrap().log().clone(),
             });

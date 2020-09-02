@@ -5,14 +5,17 @@ mod state_id;
 use beacon_chain::{BeaconChain, BeaconChainError, BeaconChainTypes};
 use block_id::BlockId;
 use eth2::types::{self as api_types, ValidatorId};
+use eth2_libp2p::PubsubMessage;
+use network::NetworkMessage;
 use serde::{Deserialize, Serialize};
-use slog::{crit, info, Logger};
+use slog::{crit, error, info, Logger};
 use state_id::StateId;
 use std::borrow::Cow;
 use std::future::Future;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
-use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch};
+use tokio::sync::mpsc::UnboundedSender;
+use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch, SignedBeaconBlock};
 use warp::Filter;
 
 const API_PREFIX: &str = "eth";
@@ -21,6 +24,7 @@ const API_VERSION: &str = "v1";
 pub struct Context<T: BeaconChainTypes> {
     pub config: Config,
     pub chain: Option<Arc<BeaconChain<T>>>,
+    pub network_tx: Option<UnboundedSender<NetworkMessage<T::EthSpec>>>,
     pub log: Logger,
 }
 
@@ -53,20 +57,37 @@ pub fn serve<T: BeaconChainTypes>(
         panic!("a disabled server should not be started");
     }
 
-    let base_path = warp::path(API_PREFIX).and(warp::path(API_VERSION));
-    let chain_filter = warp::any()
-        .map(move || ctx.chain.clone())
-        .and_then(|chain| async move {
-            match chain {
-                Some(chain) => Ok(chain),
+    let eth1_v1 = warp::path(API_PREFIX).and(warp::path(API_VERSION));
+
+    let inner_ctx = ctx.clone();
+    let chain_filter =
+        warp::any()
+            .map(move || inner_ctx.chain.clone())
+            .and_then(|chain| async move {
+                match chain {
+                    Some(chain) => Ok(chain),
+                    None => Err(crate::reject::custom_not_found(
+                        "Beacon chain genesis has not yet been observed.".to_string(),
+                    )),
+                }
+            });
+
+    let inner_ctx = ctx.clone();
+    let network_tx_filter = warp::any()
+        .map(move || inner_ctx.network_tx.clone())
+        .and_then(|network_tx| async move {
+            match network_tx {
+                Some(network_tx) => Ok(network_tx),
                 None => Err(crate::reject::custom_not_found(
-                    "Beacon chain genesis has not yet been observed.".to_string(),
+                    "The networking stack has not yet started.".to_string(),
                 )),
             }
         });
 
+    let log_filter = warp::any().map(move || ctx.log.clone());
+
     // beacon/genesis
-    let beacon_genesis = base_path
+    let beacon_genesis = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("genesis"))
         .and(warp::path::end())
@@ -89,7 +110,7 @@ pub fn serve<T: BeaconChainTypes>(
      * beacon/states/{state_id}
      */
 
-    let beacon_states_path = base_path
+    let beacon_states_path = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("states"))
         .and(warp::path::param::<StateId>())
@@ -119,10 +140,17 @@ pub fn serve<T: BeaconChainTypes>(
         });
 
     // beacon/states/{state_id}/finality_checkpoints
-    let beacon_state_finality_checkpoints = beacon_states_path
-        .clone()
+    //let beacon_state_finality_checkpoints = beacon_states_path
+    let beacon_state_finality_checkpoints = warp::any()
+        .and(warp::path(API_PREFIX))
+        .and(warp::path(API_VERSION))
+        .and(warp::path("beacon"))
+        .and(warp::path("states"))
+        .and(warp::path::param::<StateId>())
         .and(warp::path("finality_checkpoints"))
         .and(warp::path::end())
+        .and(warp::get())
+        .and(chain_filter.clone())
         .and_then(|state_id: StateId, chain: Arc<BeaconChain<T>>| {
             blocking_json_task(move || {
                 state_id
@@ -308,7 +336,7 @@ pub fn serve<T: BeaconChainTypes>(
     // things. Returning non-canonical things is hard for us since we don't already have a
     // mechanism for arbitrary forwards block iteration, we only support iterating forwards along
     // the canonical chain.
-    let beacon_headers = base_path
+    let beacon_headers = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::query::<api_types::HeadersQuery>())
@@ -383,7 +411,7 @@ pub fn serve<T: BeaconChainTypes>(
         );
 
     // beacon/headers/{block_id}
-    let beacon_headers_block_id = base_path
+    let beacon_headers_block_id = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("headers"))
         .and(warp::path::param::<BlockId>())
@@ -413,10 +441,62 @@ pub fn serve<T: BeaconChainTypes>(
         });
 
     /*
-     * beacon/blocks/{block_id}
+     * beacon/blocks
      */
 
-    let beacon_blocks_path = base_path
+    // beacon/blocks/{block_id}
+    //let post_beacon_blocks = post_eth1_v1
+    let post_beacon_blocks = eth1_v1
+        .and(warp::path("beacon"))
+        .and(warp::path("blocks"))
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(chain_filter.clone())
+        .and(network_tx_filter.clone())
+        .and(log_filter.clone())
+        .and_then(
+            |block: SignedBeaconBlock<T::EthSpec>,
+             chain: Arc<BeaconChain<T>>,
+             network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>,
+             log: Logger| {
+                blocking_json_task(move || {
+                    dbg!("rahh");
+                    // Send the block, regardless of whether or not it is valid. The API
+                    // specification is very clear that this is the desired behaviour.
+                    if let Err(e) = network_tx.send(NetworkMessage::Publish {
+                        messages: vec![PubsubMessage::BeaconBlock(Box::new(block.clone()))],
+                    }) {
+                        return Err(crate::reject::custom_server_error(format!(
+                            "unable to publish to network channel: {}",
+                            e
+                        )));
+                    }
+
+                    match chain.process_block(block.clone()) {
+                        Ok(root) => {
+                            info!(
+                                log,
+                                "Valid block from HTTP API";
+                                "root" => format!("{}", root)
+                            );
+                            Ok(())
+                        }
+                        Err(e) => {
+                            let msg = format!("{:?}", e);
+                            error!(
+                                log,
+                                "Invalid block provided to HTTP API";
+                                "reason" => &msg
+                            );
+                            Err(crate::reject::block_failed_validation(msg))
+                        }
+                    }
+                })
+            },
+        );
+
+    let beacon_blocks_path = eth1_v1
         .and(warp::path("beacon"))
         .and(warp::path("blocks"))
         .and(warp::path::param::<BlockId>())
@@ -466,12 +546,12 @@ pub fn serve<T: BeaconChainTypes>(
         .or(beacon_state_committees)
         .or(beacon_headers)
         .or(beacon_headers_block_id)
+        .or(post_beacon_blocks)
         .or(beacon_block)
         .or(beacon_block_attestations)
         .or(beacon_block_root)
         .recover(crate::reject::handle_rejection);
 
-    // let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(
         SocketAddrV4::new(config.listen_addr, config.listen_port),
         async {

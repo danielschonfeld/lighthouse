@@ -5,9 +5,11 @@ use beacon_chain::{
 use environment::null_logger;
 use eth2::{types::*, BeaconNodeClient, Url};
 use http_api::{Config, Context};
+use network::NetworkMessage;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use store::config::StoreConfig;
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use types::{
     test_utils::generate_deterministic_keypairs, BeaconState, EthSpec, Hash256, MainnetEthSpec,
@@ -36,6 +38,7 @@ struct ApiTester {
     chain: Arc<BeaconChain<HarnessType<E>>>,
     client: BeaconNodeClient,
     _server_shutdown: oneshot::Sender<()>,
+    network_rx: mpsc::UnboundedReceiver<NetworkMessage<E>>,
 }
 
 impl ApiTester {
@@ -79,6 +82,8 @@ impl ApiTester {
             "precondition: justification"
         );
 
+        let (network_tx, network_rx) = mpsc::unbounded_channel();
+
         let context = Arc::new(Context {
             config: Config {
                 enabled: true,
@@ -86,6 +91,7 @@ impl ApiTester {
                 listen_port: 0,
             },
             chain: Some(chain.clone()),
+            network_tx: Some(network_tx),
             log: null_logger().unwrap(),
         });
         let ctx = context.clone();
@@ -112,6 +118,7 @@ impl ApiTester {
             chain,
             client,
             _server_shutdown: shutdown_tx,
+            network_rx,
         }
     }
 

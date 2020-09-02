@@ -16,7 +16,8 @@ hex = "0.4.2"
 beacon_chain = { path = "../beacon_chain" }
 eth2 = { path = "../../common/eth2" }
 slog = "2.5.2"
-
+network = { path = "../network" }
+eth2_libp2p = { path = "../eth2_libp2p" }
 
 [dev-dependencies]
 store = { path = "../store" }
