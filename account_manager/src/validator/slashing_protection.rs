@@ -29,7 +29,7 @@ pub fn cli_app<'a, 'b>() -> App<'a, 'b> {
             App::new(EXPORT_CMD)
                 .about("Export an interchange file")
                 .arg(
-                    Arg::with_name(IMPORT_FILE_ARG)
+                    Arg::with_name(EXPORT_FILE_ARG)
                         .takes_value(true)
                         .value_name("FILE")
                         .help("The filename to export the interchange file to"),
