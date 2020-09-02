@@ -200,7 +200,7 @@ impl SlashingDatabase {
     ) -> Result<(), NotSafe> {
         let mut stmt = txn.prepare("INSERT INTO validators (public_key) VALUES (?1)")?;
         for pubkey in public_keys {
-            if Self::get_validator_id_opt(&txn, pubkey)?.is_none() {
+            if self.get_validator_id_opt(&txn, pubkey)?.is_none() {
                 stmt.execute(&[pubkey.to_hex_string()])?;
             }
         }
@@ -214,17 +214,21 @@ impl SlashingDatabase {
     pub fn get_validator_id(&self, public_key: &PublicKey) -> Result<i64, NotSafe> {
         let mut conn = self.conn_pool.get()?;
         let txn = conn.transaction()?;
-        Self::get_validator_id_in_txn(&txn, public_key)
+        self.get_validator_id_in_txn(&txn, public_key)
     }
 
-    fn get_validator_id_in_txn(txn: &Transaction, public_key: &PublicKey) -> Result<i64, NotSafe> {
-        Self::get_validator_id_opt(txn, public_key)?
+    fn get_validator_id_in_txn(
+        &self,
+        txn: &Transaction,
+        public_key: &PublicKey,
+    ) -> Result<i64, NotSafe> {
+        self.get_validator_id_opt(txn, public_key)?
             .ok_or_else(|| NotSafe::UnregisteredValidator(public_key.clone()))
     }
 
     /// Optional version of `get_validator_id`.
-    // FIXME(sproul): add a `&self` argument to all of these methods
     fn get_validator_id_opt(
+        &self,
         txn: &Transaction,
         public_key: &PublicKey,
     ) -> Result<Option<i64>, NotSafe> {
@@ -286,7 +290,7 @@ impl SlashingDatabase {
         slot: Slot,
         signing_root: Hash256,
     ) -> Result<Safe, NotSafe> {
-        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
+        let validator_id = self.get_validator_id_in_txn(txn, validator_pubkey)?;
 
         if let Some(lower_bound_slot) = self
             .get_lower_bound(txn, validator_id)?
@@ -343,7 +347,7 @@ impl SlashingDatabase {
             ));
         }
 
-        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
+        let validator_id = self.get_validator_id_in_txn(txn, validator_pubkey)?;
 
         // Check for a lower-bound violation on either the source of the target.
         if let Some(lower_bound) = self.get_lower_bound(txn, validator_id)? {
@@ -455,7 +459,7 @@ impl SlashingDatabase {
         slot: Slot,
         signing_root: Hash256,
     ) -> Result<(), NotSafe> {
-        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
+        let validator_id = self.get_validator_id_in_txn(txn, validator_pubkey)?;
 
         txn.execute(
             "INSERT INTO signed_blocks (validator_id, slot, signing_root)
@@ -477,7 +481,7 @@ impl SlashingDatabase {
         att_target_epoch: Epoch,
         att_signing_root: Hash256,
     ) -> Result<(), NotSafe> {
-        let validator_id = Self::get_validator_id_in_txn(txn, validator_pubkey)?;
+        let validator_id = self.get_validator_id_in_txn(txn, validator_pubkey)?;
 
         txn.execute(
             "INSERT INTO signed_attestations (validator_id, source_epoch, target_epoch, signing_root)
@@ -614,7 +618,7 @@ impl SlashingDatabase {
 
                 // Update lower bounds.
                 for record in records {
-                    let validator_id = Self::get_validator_id_in_txn(&txn, &record.pubkey)?;
+                    let validator_id = self.get_validator_id_in_txn(&txn, &record.pubkey)?;
 
                     // If a source or target is provided, both should be.
                     if record.last_signed_attestation_source_epoch.is_some()
