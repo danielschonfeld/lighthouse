@@ -8,6 +8,15 @@ pub use types::{
     SignatureBytes, SignedBeaconBlock, Slot, Validator,
 };
 
+/// An API error serializable to JSON.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ErrorMessage {
+    pub code: u16,
+    pub message: String,
+    #[serde(default)]
+    pub stacktraces: Vec<String>,
+}
+
 /// The number of epochs between when a validator is eligible for activation and when they
 /// *usually* enter the activation queue.
 const EPOCHS_BEFORE_FINALITY: u64 = 3;

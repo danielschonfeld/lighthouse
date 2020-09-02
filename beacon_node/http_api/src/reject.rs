@@ -1,4 +1,4 @@
-use serde::Serialize;
+use eth2::types::ErrorMessage;
 use std::convert::Infallible;
 use std::error::Error;
 use warp::{http::StatusCode, reject::Reject};
@@ -46,13 +46,6 @@ impl Reject for BlockFailedValidation {}
 
 pub fn block_failed_validation(msg: String) -> warp::reject::Rejection {
     warp::reject::custom(BlockFailedValidation(msg))
-}
-
-/// An API error serializable to JSON.
-#[derive(Serialize)]
-struct ErrorMessage {
-    code: u16,
-    message: String,
 }
 
 // This function receives a `Rejection` and tries to return a custom
@@ -114,6 +107,7 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     let json = warp::reply::json(&ErrorMessage {
         code: code.as_u16(),
         message: message.to_string(),
+        stacktraces: vec![],
     });
 
     Ok(warp::reply::with_status(json, code))

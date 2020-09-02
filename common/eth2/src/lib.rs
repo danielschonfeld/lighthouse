@@ -1,10 +1,28 @@
 pub mod types;
 
 use self::types::*;
-use reqwest::{Error, IntoUrl, StatusCode};
+use reqwest::{IntoUrl, Response, StatusCode};
 use serde::de::DeserializeOwned;
+use std::convert::TryFrom;
 
 pub use reqwest::Url;
+
+#[derive(Debug)]
+pub enum Error {
+    Reqwest(reqwest::Error),
+    ServerMessage(ErrorMessage),
+    StatusCode(StatusCode),
+}
+
+impl Error {
+    fn status(&self) -> Option<StatusCode> {
+        match self {
+            Error::Reqwest(error) => error.status(),
+            Error::ServerMessage(msg) => StatusCode::try_from(msg.code).ok(),
+            Error::StatusCode(status) => Some(*status),
+        }
+    }
+}
 
 pub struct BeaconNodeClient {
     client: reqwest::Client,
@@ -23,18 +41,18 @@ impl BeaconNodeClient {
     }
 
     async fn get<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<T, Error> {
-        self.client
-            .get(url)
-            .send()
+        let response = self.client.get(url).send().await.map_err(Error::Reqwest)?;
+        ok_or_error(response)
             .await?
-            .error_for_status()?
             .json()
             .await
+            .map_err(Error::Reqwest)
     }
 
     async fn get_opt<T: DeserializeOwned, U: IntoUrl>(&self, url: U) -> Result<Option<T>, Error> {
-        match self.client.get(url).send().await?.error_for_status() {
-            Ok(resp) => resp.json().await.map(Option::Some),
+        let response = self.client.get(url).send().await.map_err(Error::Reqwest)?;
+        match ok_or_error(response).await {
+            Ok(resp) => resp.json().await.map(Option::Some).map_err(Error::Reqwest),
             Err(err) => {
                 if err.status() == Some(StatusCode::NOT_FOUND) {
                     Ok(None)
@@ -251,12 +269,15 @@ impl BeaconNodeClient {
             .push("beacon")
             .push("blocks");
 
-        self.client
+        let response = self
+            .client
             .post(path)
             .json(&block)
             .send()
-            .await?
-            .error_for_status()?;
+            .await
+            .map_err(Error::Reqwest)?;
+
+        ok_or_error(response).await?;
 
         Ok(())
     }
@@ -315,5 +336,21 @@ impl BeaconNodeClient {
             .push("attestations");
 
         self.get_opt(path).await
+    }
+}
+
+/// Returns `Ok(response)` if the response is a `200 OK` response. Otherwise, creates an
+/// appropriate error message.
+async fn ok_or_error(response: Response) -> Result<Response, Error> {
+    let status = response.status();
+
+    if status == StatusCode::OK {
+        Ok(response)
+    } else {
+        if let Some(message) = response.json().await.ok() {
+            Err(Error::ServerMessage(message))
+        } else {
+            Err(Error::StatusCode(status))
+        }
     }
 }
