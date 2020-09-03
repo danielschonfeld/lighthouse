@@ -672,8 +672,18 @@ impl SlashingDatabase {
         Ok(())
     }
 
-    // FIXME(sproul): add logging
     pub fn export_interchange_info(
+        &self,
+        genesis_validators_root: Hash256,
+    ) -> Result<Interchange, InterchangeError> {
+        if self.num_lower_bound_rows()? > 0 {
+            self.export_minimal_interchange_info(genesis_validators_root)
+        } else {
+            self.export_complete_interchange_info(genesis_validators_root)
+        }
+    }
+
+    pub fn export_complete_interchange_info(
         &self,
         genesis_validators_root: Hash256,
     ) -> Result<Interchange, InterchangeError> {
@@ -839,6 +849,15 @@ impl SlashingDatabase {
         let txn = conn.transaction()?;
         let count = txn
             .prepare("SELECT COALESCE(COUNT(*), 0) FROM validators")?
+            .query_row(params![], |row| row.get(0))?;
+        Ok(count)
+    }
+
+    pub fn num_lower_bound_rows(&self) -> Result<u32, NotSafe> {
+        let mut conn = self.conn_pool.get()?;
+        let txn = conn.transaction()?;
+        let count = txn
+            .prepare("SELECT COALESCE(COUNT(*), 0) FROM lower_bounds")?
             .query_row(params![], |row| row.get(0))?;
         Ok(count)
     }

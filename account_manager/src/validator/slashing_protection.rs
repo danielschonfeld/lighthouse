@@ -9,12 +9,14 @@ pub const CMD: &str = "slashing-protection";
 pub const IMPORT_CMD: &str = "import";
 pub const EXPORT_CMD: &str = "export";
 
-pub const IMPORT_FILE_ARG: &str = "import-file";
-pub const EXPORT_FILE_ARG: &str = "export-file";
+pub const IMPORT_FILE_ARG: &str = "IMPORT-FILE";
+pub const EXPORT_FILE_ARG: &str = "EXPORT-FILE";
+pub const MINIMAL_FORMAT_ARG: &str = "minimal";
+pub const COMPLETE_FORMAT_ARG: &str = "force-complete";
 
 pub fn cli_app<'a, 'b>() -> App<'a, 'b> {
     App::new(CMD)
-        .about("Import or export slashing protection data another client")
+        .about("Import or export slashing protection data to or from another client")
         .subcommand(
             App::new(IMPORT_CMD)
                 .about("Import an interchange file")
@@ -33,6 +35,21 @@ pub fn cli_app<'a, 'b>() -> App<'a, 'b> {
                         .takes_value(true)
                         .value_name("FILE")
                         .help("The filename to export the interchange file to"),
+                )
+                .arg(
+                    Arg::with_name(MINIMAL_FORMAT_ARG)
+                        .long(MINIMAL_FORMAT_ARG)
+                        .help("Export the data in the minimal format"),
+                )
+                .arg(
+                    Arg::with_name(COMPLETE_FORMAT_ARG)
+                        .long(COMPLETE_FORMAT_ARG)
+                        .help(
+                            "Forcefully export the data in the complete format. \
+                             NOT SAFE if any minimal interchange has been imported previously.",
+                        )
+                        .hidden(true)
+                        .conflicts_with(MINIMAL_FORMAT_ARG),
                 ),
         )
 }
@@ -62,7 +79,7 @@ pub fn cli_run<T: EthSpec>(matches: &ArgMatches<'_>, env: Environment<T>) -> Res
 
     match matches.subcommand() {
         (IMPORT_CMD, Some(matches)) => {
-            let import_filename: PathBuf = clap_utils::parse_required(&matches, "import-file")?;
+            let import_filename: PathBuf = clap_utils::parse_required(&matches, IMPORT_FILE_ARG)?;
             let import_file = File::open(&import_filename).map_err(|e| {
                 format!(
                     "Unable to open import file at {}: {:?}",
@@ -101,9 +118,16 @@ pub fn cli_run<T: EthSpec>(matches: &ArgMatches<'_>, env: Environment<T>) -> Res
                     )
                 })?;
 
-            let interchange = slashing_protection_database
-                .export_interchange_info(genesis_validators_root)
-                .map_err(|e| format!("Error during export: {:?}", e))?;
+            let interchange = if matches.is_present(MINIMAL_FORMAT_ARG) {
+                slashing_protection_database
+                    .export_minimal_interchange_info(genesis_validators_root)
+            } else if matches.is_present(COMPLETE_FORMAT_ARG) {
+                slashing_protection_database
+                    .export_complete_interchange_info(genesis_validators_root)
+            } else {
+                slashing_protection_database.export_interchange_info(genesis_validators_root)
+            }
+            .map_err(|e| format!("Error during export: {:?}", e))?;
 
             let output_file = File::create(export_filename)
                 .map_err(|e| format!("Error creating output file: {:?}", e))?;
