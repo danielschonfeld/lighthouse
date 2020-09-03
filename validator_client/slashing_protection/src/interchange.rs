@@ -1,3 +1,4 @@
+use crate::serde::Quoted;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::iter::FromIterator;
@@ -14,18 +15,43 @@ pub enum InterchangeFormat {
 #[serde(deny_unknown_fields)]
 pub struct InterchangeMetadata {
     pub interchange_format: InterchangeFormat,
-    #[serde(with = "types::serde_utils::quoted")]
+    #[serde(with = "types::serde_utils::only_quoted")]
     pub interchange_format_version: u64,
     pub genesis_validators_root: Hash256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(from = "QuotedMinimalInterchangeData")]
 #[serde(deny_unknown_fields)]
 pub struct MinimalInterchangeData {
     pub pubkey: PublicKey,
     pub last_signed_block_slot: Option<Slot>,
     pub last_signed_attestation_source_epoch: Option<Epoch>,
     pub last_signed_attestation_target_epoch: Option<Epoch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct QuotedMinimalInterchangeData {
+    pub pubkey: PublicKey,
+    pub last_signed_block_slot: Option<Quoted<Slot>>,
+    pub last_signed_attestation_source_epoch: Option<Quoted<Epoch>>,
+    pub last_signed_attestation_target_epoch: Option<Quoted<Epoch>>,
+}
+
+impl From<QuotedMinimalInterchangeData> for MinimalInterchangeData {
+    fn from(quoted: QuotedMinimalInterchangeData) -> Self {
+        MinimalInterchangeData {
+            pubkey: quoted.pubkey,
+            last_signed_block_slot: quoted.last_signed_block_slot.map(|q| q.value),
+            last_signed_attestation_source_epoch: quoted
+                .last_signed_attestation_source_epoch
+                .map(|q| q.value),
+            last_signed_attestation_target_epoch: quoted
+                .last_signed_attestation_target_epoch
+                .map(|q| q.value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -39,6 +65,7 @@ pub struct CompleteInterchangeData {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedBlock {
+    #[serde(with = "types::serde_utils::only_quoted")]
     pub slot: Slot,
     pub signing_root: Option<Hash256>,
 }
@@ -46,7 +73,9 @@ pub struct SignedBlock {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedAttestation {
+    #[serde(with = "types::serde_utils::only_quoted")]
     pub source_epoch: Epoch,
+    #[serde(with = "types::serde_utils::only_quoted")]
     pub target_epoch: Epoch,
     pub signing_root: Option<Hash256>,
 }
