@@ -2,7 +2,9 @@ mod block_id;
 mod reject;
 mod state_id;
 
-use beacon_chain::{BeaconChain, BeaconChainError, BeaconChainTypes};
+use beacon_chain::{
+    observed_operations::ObservationOutcome, BeaconChain, BeaconChainError, BeaconChainTypes,
+};
 use block_id::BlockId;
 use eth2::types::{self as api_types, ValidatorId};
 use eth2_libp2p::PubsubMessage;
@@ -15,7 +17,10 @@ use std::future::Future;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
-use types::{CommitteeCache, Epoch, EthSpec, RelativeEpoch, SignedBeaconBlock};
+use types::{
+    Attestation, AttesterSlashing, CommitteeCache, Epoch, EthSpec, ProposerSlashing, RelativeEpoch,
+    SignedBeaconBlock, SignedVoluntaryExit,
+};
 use warp::Filter;
 
 const API_PREFIX: &str = "eth";
@@ -461,14 +466,10 @@ pub fn serve<T: BeaconChainTypes>(
                 blocking_json_task(move || {
                     // Send the block, regardless of whether or not it is valid. The API
                     // specification is very clear that this is the desired behaviour.
-                    if let Err(e) = network_tx.send(NetworkMessage::Publish {
-                        messages: vec![PubsubMessage::BeaconBlock(Box::new(block.clone()))],
-                    }) {
-                        return Err(crate::reject::custom_server_error(format!(
-                            "unable to publish to network channel: {}",
-                            e
-                        )));
-                    }
+                    publish_network_message(
+                        &network_tx,
+                        PubsubMessage::BeaconBlock(Box::new(block.clone())),
+                    )?;
 
                     match chain.process_block(block.clone()) {
                         Ok(root) => {
@@ -486,7 +487,7 @@ pub fn serve<T: BeaconChainTypes>(
                                 "Invalid block provided to HTTP API";
                                 "reason" => &msg
                             );
-                            Err(crate::reject::block_failed_validation(msg))
+                            Err(crate::reject::broadcast_without_import(msg))
                         }
                     }
                 })
@@ -542,6 +543,59 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path("beacon"))
         .and(warp::path("pool"))
         .and(chain_filter.clone());
+
+    // POST beacon/pool/attestations
+    let post_beacon_pool_attestations = beacon_pool_path
+        .clone()
+        .and(warp::path("attestations"))
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(network_tx_filter.clone())
+        .and_then(
+            |chain: Arc<BeaconChain<T>>,
+             attestation: Attestation<T::EthSpec>,
+             network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>| {
+                blocking_json_task(move || {
+                    dbg!("this");
+                    let attestation = chain
+                        .verify_unaggregated_attestation_for_gossip(attestation.clone(), None)
+                        .map_err(|e| {
+                            crate::reject::object_invalid(format!(
+                                "gossip verification failed: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    publish_network_message(
+                        &network_tx,
+                        PubsubMessage::Attestation(Box::new((
+                            attestation.subnet_id(),
+                            attestation.attestation().clone(),
+                        ))),
+                    )?;
+
+                    chain
+                        .apply_attestation_to_fork_choice(&attestation)
+                        .map_err(|e| {
+                            crate::reject::broadcast_without_import(format!(
+                                "not applied to fork choice: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    chain
+                        .add_to_naive_aggregation_pool(attestation)
+                        .map_err(|e| {
+                            crate::reject::broadcast_without_import(format!(
+                                "not applied to naive aggregation pool: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    Ok(())
+                })
+            },
+        );
 
     // GET beacon/pool/attestations
     let get_beacon_pool_attestations = beacon_pool_path
@@ -624,6 +678,22 @@ pub fn serve<T: BeaconChainTypes>(
     );
 
     Ok((listening_socket, server))
+}
+
+fn publish_network_message<T: EthSpec>(
+    network_tx: &UnboundedSender<NetworkMessage<T>>,
+    message: PubsubMessage<T>,
+) -> Result<(), warp::Rejection> {
+    network_tx
+        .send(NetworkMessage::Publish {
+            messages: vec![message],
+        })
+        .map_err(|e| {
+            crate::reject::custom_server_error(format!(
+                "unable to publish to network channel: {}",
+                e
+            ))
+        })
 }
 
 async fn blocking_task<F, T>(func: F) -> T

@@ -2,7 +2,7 @@ pub mod types;
 
 use self::types::*;
 use reqwest::{IntoUrl, Response, StatusCode};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use std::convert::TryFrom;
 
 pub use reqwest::Url;
@@ -61,6 +61,18 @@ impl BeaconNodeClient {
                 }
             }
         }
+    }
+
+    async fn post<T: Serialize, U: IntoUrl>(&self, url: U, body: &T) -> Result<(), Error> {
+        let response = self
+            .client
+            .post(url)
+            .json(body)
+            .send()
+            .await
+            .map_err(Error::Reqwest)?;
+        ok_or_error(response).await?;
+        Ok(())
     }
 
     /// `GET beacon/genesis`
@@ -255,7 +267,7 @@ impl BeaconNodeClient {
         self.get_opt(path).await
     }
 
-    /// `GET beacon/blocks`
+    /// `POST beacon/blocks`
     ///
     /// Returns `Ok(None)` on a 404 error.
     pub async fn post_beacon_blocks<T: EthSpec>(
@@ -269,15 +281,7 @@ impl BeaconNodeClient {
             .push("beacon")
             .push("blocks");
 
-        let response = self
-            .client
-            .post(path)
-            .json(&block)
-            .send()
-            .await
-            .map_err(Error::Reqwest)?;
-
-        ok_or_error(response).await?;
+        self.post(path, &block).await?;
 
         Ok(())
     }
@@ -338,6 +342,24 @@ impl BeaconNodeClient {
         self.get_opt(path).await
     }
 
+    /// `POST beacon/pool/attestations`
+    pub async fn post_beacon_pool_attestations<T: EthSpec>(
+        &self,
+        attestation: &Attestation<T>,
+    ) -> Result<(), Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("pool")
+            .push("attestations");
+
+        self.post(path, attestation).await?;
+
+        Ok(())
+    }
+
     /// `GET beacon/pool/attestations`
     pub async fn get_beacon_pool_attestations<T: EthSpec>(
         &self,
@@ -351,6 +373,24 @@ impl BeaconNodeClient {
             .push("attestations");
 
         self.get(path).await
+    }
+
+    /// `POST beacon/pool/attester_slashings`
+    pub async fn post_beacon_pool_attester_slashings<T: EthSpec>(
+        &self,
+        slashing: AttesterSlashing<T>,
+    ) -> Result<(), Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("pool")
+            .push("attester_slashings");
+
+        self.post(path, &slashing).await?;
+
+        Ok(())
     }
 
     /// `GET beacon/pool/attester_slashings`
@@ -368,6 +408,24 @@ impl BeaconNodeClient {
         self.get(path).await
     }
 
+    /// `POST beacon/pool/proposer_slashings`
+    pub async fn post_beacon_pool_proposer_slashings<T: EthSpec>(
+        &self,
+        slashing: ProposerSlashing,
+    ) -> Result<(), Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("pool")
+            .push("proposer_slashings");
+
+        self.post(path, &slashing).await?;
+
+        Ok(())
+    }
+
     /// `GET beacon/pool/proposer_slashings`
     pub async fn get_beacon_pool_proposer_slashings(
         &self,
@@ -381,6 +439,24 @@ impl BeaconNodeClient {
             .push("proposer_slashings");
 
         self.get(path).await
+    }
+
+    /// `POST beacon/pool/voluntary_exits`
+    pub async fn post_beacon_pool_voluntary_exits(
+        &self,
+        exit: SignedVoluntaryExit,
+    ) -> Result<(), Error> {
+        let mut path = self.server.clone();
+
+        path.path_segments_mut()
+            .expect("path is base")
+            .push("beacon")
+            .push("pool")
+            .push("voluntary_exits");
+
+        self.post(path, &exit).await?;
+
+        Ok(())
     }
 
     /// `GET beacon/pool/voluntary_exits`

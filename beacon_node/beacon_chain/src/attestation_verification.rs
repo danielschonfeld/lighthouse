@@ -251,6 +251,7 @@ pub struct VerifiedAggregatedAttestation<T: BeaconChainTypes> {
 pub struct VerifiedUnaggregatedAttestation<T: BeaconChainTypes> {
     attestation: Attestation<T::EthSpec>,
     indexed_attestation: IndexedAttestation<T::EthSpec>,
+    subnet_id: SubnetId,
 }
 
 /// Custom `Clone` implementation is to avoid the restrictive trait bounds applied by the usual derive
@@ -260,6 +261,7 @@ impl<T: BeaconChainTypes> Clone for VerifiedUnaggregatedAttestation<T> {
         Self {
             attestation: self.attestation.clone(),
             indexed_attestation: self.indexed_attestation.clone(),
+            subnet_id: self.subnet_id.clone(),
         }
     }
 }
@@ -422,7 +424,7 @@ impl<T: BeaconChainTypes> VerifiedUnaggregatedAttestation<T> {
     /// verify that it was received on the correct subnet.
     pub fn verify(
         attestation: Attestation<T::EthSpec>,
-        subnet_id: SubnetId,
+        subnet_id: Option<SubnetId>,
         chain: &BeaconChain<T>,
     ) -> Result<Self, Error> {
         // Ensure attestation is within the last ATTESTATION_PROPAGATION_SLOT_RANGE slots (within a
@@ -454,13 +456,15 @@ impl<T: BeaconChainTypes> VerifiedUnaggregatedAttestation<T> {
         )
         .map_err(BeaconChainError::from)?;
 
-        // Ensure the attestation is from the correct subnet.
-        if subnet_id != expected_subnet_id {
-            return Err(Error::InvalidSubnetId {
-                received: subnet_id,
-                expected: expected_subnet_id,
-            });
-        }
+        // If a subnet was specified, ensure that subnet is correct.
+        if let Some(subnet_id) = subnet_id {
+            if subnet_id != expected_subnet_id {
+                return Err(Error::InvalidSubnetId {
+                    received: subnet_id,
+                    expected: expected_subnet_id,
+                });
+            }
+        };
 
         let validator_index = *indexed_attestation
             .attesting_indices
@@ -505,12 +509,18 @@ impl<T: BeaconChainTypes> VerifiedUnaggregatedAttestation<T> {
         Ok(Self {
             attestation,
             indexed_attestation,
+            subnet_id: expected_subnet_id,
         })
     }
 
     /// A helper function to add this attestation to `beacon_chain.naive_aggregation_pool`.
     pub fn add_to_pool(self, chain: &BeaconChain<T>) -> Result<Self, Error> {
         chain.add_to_naive_aggregation_pool(self)
+    }
+
+    /// Returns the correct subnet for the attestation.
+    pub fn subnet_id(&self) -> SubnetId {
+        self.subnet_id
     }
 
     /// Returns the wrapped `attestation`.

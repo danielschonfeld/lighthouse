@@ -937,7 +937,7 @@ impl<T: BeaconChainTypes> BeaconChain<T> {
     pub fn verify_unaggregated_attestation_for_gossip(
         &self,
         attestation: Attestation<T::EthSpec>,
-        subnet_id: SubnetId,
+        subnet_id: Option<SubnetId>,
     ) -> Result<VerifiedUnaggregatedAttestation<T>, AttestationError> {
         metrics::inc_counter(&metrics::UNAGGREGATED_ATTESTATION_PROCESSING_REQUESTS);
         let _timer =

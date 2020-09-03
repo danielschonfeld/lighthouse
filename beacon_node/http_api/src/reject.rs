@@ -40,12 +40,21 @@ pub fn custom_server_error(msg: String) -> warp::reject::Rejection {
 }
 
 #[derive(Debug)]
-pub struct BlockFailedValidation(pub String);
+pub struct BroadcastWithoutImport(pub String);
 
-impl Reject for BlockFailedValidation {}
+impl Reject for BroadcastWithoutImport {}
 
-pub fn block_failed_validation(msg: String) -> warp::reject::Rejection {
-    warp::reject::custom(BlockFailedValidation(msg))
+pub fn broadcast_without_import(msg: String) -> warp::reject::Rejection {
+    warp::reject::custom(BroadcastWithoutImport(msg))
+}
+
+#[derive(Debug)]
+pub struct ObjectInvalid(pub String);
+
+impl Reject for ObjectInvalid {}
+
+pub fn object_invalid(msg: String) -> warp::reject::Rejection {
+    warp::reject::custom(ObjectInvalid(msg))
 }
 
 // This function receives a `Rejection` and tries to return a custom
@@ -90,13 +99,16 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     } else if let Some(e) = err.find::<crate::reject::CustomServerError>() {
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = format!("INTERNAL_SERVER_ERROR: {}", e.0);
-    } else if let Some(e) = err.find::<crate::reject::BlockFailedValidation>() {
+    } else if let Some(e) = err.find::<crate::reject::BroadcastWithoutImport>() {
         code = StatusCode::ACCEPTED;
         message = format!(
-            "ACCEPTED: The block failed validation, but was successfully broadcast anyway. \
-            It was not integrated into the beacon node database: {}",
+            "ACCEPTED: the object was broadcast to the network without being \
+            fully imported to the local database: {}",
             e.0
         );
+    } else if let Some(e) = err.find::<crate::reject::ObjectInvalid>() {
+        code = StatusCode::BAD_REQUEST;
+        message = format!("BAD_REQUEST: Invalid object: {}", e.0);
     } else {
         // We should have expected this... Just log and say its a 500
         eprintln!("unhandled rejection: {:?}", err);

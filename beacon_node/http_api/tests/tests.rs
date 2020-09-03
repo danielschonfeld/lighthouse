@@ -18,8 +18,8 @@ use types::{
 
 type E = MainnetEthSpec;
 
-const VALIDATOR_COUNT: usize = 24;
 const SLOTS_PER_EPOCH: u64 = 32;
+const VALIDATOR_COUNT: usize = SLOTS_PER_EPOCH as usize;
 const CHAIN_LENGTH: u64 = SLOTS_PER_EPOCH * 5;
 const JUSTIFIED_EPOCH: u64 = 4;
 const FINALIZED_EPOCH: u64 = 3;
@@ -38,6 +38,7 @@ struct ApiTester {
     chain: Arc<BeaconChain<HarnessType<E>>>,
     client: BeaconNodeClient,
     next_block: SignedBeaconBlock<E>,
+    attestations: Vec<Attestation<E>>,
     _server_shutdown: oneshot::Sender<()>,
     network_rx: mpsc::UnboundedReceiver<NetworkMessage<E>>,
 }
@@ -67,6 +68,23 @@ impl ApiTester {
         }
 
         let (next_block, _next_state) = harness.get_block();
+        let head = harness.chain.head().unwrap();
+        let attestations = harness
+            .get_unaggregated_attestations(
+                &AttestationStrategy::AllValidators,
+                &head.beacon_state,
+                head.beacon_block_root,
+                head.beacon_state.slot + 1,
+            )
+            .into_iter()
+            .map(|vec| vec.into_iter().map(|(attestation, _subnet_id)| attestation))
+            .flatten()
+            .collect::<Vec<_>>();
+
+        assert!(
+            !attestations.is_empty(),
+            "precondition: attestations for testing"
+        );
 
         let chain = Arc::new(harness.chain);
 
@@ -121,6 +139,7 @@ impl ApiTester {
             chain,
             client,
             next_block,
+            attestations,
             _server_shutdown: shutdown_tx,
             network_rx,
         }
@@ -670,7 +689,25 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_pool_attestations(self) -> Self {
+    pub async fn test_post_beacon_pool_attestations_valid(mut self) -> Self {
+        for attestation in &self.attestations {
+            self.client
+                .post_beacon_pool_attestations(attestation)
+                .await
+                .unwrap();
+
+            std::thread::sleep(std::time::Duration::from_secs(1));
+
+            assert!(
+                self.network_rx.try_recv().is_ok(),
+                "valid attestation should be sent to network"
+            );
+        }
+
+        self
+    }
+
+    pub async fn test_get_beacon_pool_attestations(self) -> Self {
         let result = self
             .client
             .get_beacon_pool_attestations()
@@ -678,7 +715,8 @@ impl ApiTester {
             .unwrap()
             .data;
 
-        let expected = self.chain.op_pool.get_all_attestations();
+        let mut expected = self.chain.op_pool.get_all_attestations();
+        expected.extend(self.chain.naive_aggregation_pool.read().iter().cloned());
 
         assert_eq!(result, expected);
 
@@ -810,12 +848,19 @@ async fn beacon_blocks_attestations() {
 #[tokio::test(core_threads = 2)]
 async fn beacon_pools_get() {
     ApiTester::new()
-        .test_beacon_pool_attestations()
+        .test_get_beacon_pool_attestations()
         .await
         .test_beacon_pool_attester_slashings()
         .await
         .test_beacon_pool_proposer_slashings()
         .await
         .test_beacon_pool_voluntary_exits()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_attestations_valid() {
+    ApiTester::new()
+        .test_post_beacon_pool_attestations_valid()
         .await;
 }
