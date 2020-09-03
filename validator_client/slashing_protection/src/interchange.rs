@@ -1,8 +1,7 @@
-use crate::serde::Quoted;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use types::{Epoch, Hash256, PublicKey, Slot};
+use types::{serde_utils::Quoted, Epoch, Hash256, PublicKey, Slot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -153,5 +152,10 @@ impl Interchange {
             InterchangeData::Minimal(m) => m.len(),
             InterchangeData::Complete(c) => c.len(),
         }
+    }
+
+    /// Is the `data` part of the interchange completely empty?
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

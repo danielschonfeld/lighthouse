@@ -138,7 +138,7 @@ pub fn cli_run<T: EthSpec>(matches: &ArgMatches<'_>, env: Environment<T>) -> Res
 
             Ok(())
         }
-        ("", _) => Err(format!("No subcommand provided, see --help for options")),
+        ("", _) => Err("No subcommand provided, see --help for options".to_string()),
         (command, _) => Err(format!("No such subcommand `{}`", command)),
     }
 }

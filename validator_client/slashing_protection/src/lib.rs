@@ -5,7 +5,6 @@ mod interchange_tests;
 mod lower_bound;
 mod parallel_tests;
 mod registration_tests;
-mod serde;
 mod signed_attestation;
 mod signed_block;
 mod slashing_database;
