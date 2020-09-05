@@ -409,7 +409,7 @@ impl BeaconNodeClient {
     }
 
     /// `POST beacon/pool/proposer_slashings`
-    pub async fn post_beacon_pool_proposer_slashings<T: EthSpec>(
+    pub async fn post_beacon_pool_proposer_slashings(
         &self,
         slashing: &ProposerSlashing,
     ) -> Result<(), Error> {

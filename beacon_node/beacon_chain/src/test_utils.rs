@@ -28,8 +28,9 @@ use tree_hash::TreeHash;
 use types::{
     AggregateSignature, Attestation, AttestationData, AttesterSlashing, BeaconState,
     BeaconStateHash, ChainSpec, Checkpoint, Domain, Epoch, EthSpec, Hash256, IndexedAttestation,
-    Keypair, SelectionProof, SignedAggregateAndProof, SignedBeaconBlock, SignedBeaconBlockHash,
-    SignedRoot, Slot, SubnetId, VariableList,
+    Keypair, ProposerSlashing, SelectionProof, SignedAggregateAndProof, SignedBeaconBlock,
+    SignedBeaconBlockHash, SignedRoot, SignedVoluntaryExit, Slot, SubnetId, VariableList,
+    VoluntaryExit,
 };
 
 pub use types::test_utils::generate_deterministic_keypairs;
@@ -602,9 +603,9 @@ where
             .collect()
     }
 
-    pub fn make_attester_slashing(&self, indices: Vec<u64>) -> AttesterSlashing<E> {
+    pub fn make_attester_slashing(&self, validator_indices: Vec<u64>) -> AttesterSlashing<E> {
         let mut attestation_1 = IndexedAttestation {
-            attesting_indices: VariableList::new(indices).unwrap(),
+            attesting_indices: VariableList::new(validator_indices).unwrap(),
             data: AttestationData {
                 slot: Slot::new(0),
                 index: 0,
@@ -647,6 +648,47 @@ where
             attestation_1,
             attestation_2,
         }
+    }
+
+    pub fn make_proposer_slashing(&self, validator_index: u64) -> ProposerSlashing {
+        let mut block_header_1 = self
+            .chain
+            .head_beacon_block()
+            .unwrap()
+            .message
+            .block_header();
+        block_header_1.proposer_index = validator_index;
+
+        let mut block_header_2 = block_header_1.clone();
+        block_header_2.state_root = Hash256::zero();
+
+        let sk = &self.validators_keypairs[validator_index as usize].sk;
+        let fork = self.chain.head_info().unwrap().fork.clone();
+        let genesis_validators_root = self.chain.genesis_validators_root;
+
+        let mut signed_block_headers = vec![block_header_1, block_header_2]
+            .into_iter()
+            .map(|block_header| {
+                block_header.sign::<E>(&sk, &fork, genesis_validators_root, &self.chain.spec)
+            })
+            .collect::<Vec<_>>();
+
+        ProposerSlashing {
+            signed_header_2: signed_block_headers.remove(1),
+            signed_header_1: signed_block_headers.remove(0),
+        }
+    }
+
+    pub fn make_voluntary_exit(&self, validator_index: u64, epoch: Epoch) -> SignedVoluntaryExit {
+        let sk = &self.validators_keypairs[validator_index as usize].sk;
+        let fork = self.chain.head_info().unwrap().fork.clone();
+        let genesis_validators_root = self.chain.genesis_validators_root;
+
+        VoluntaryExit {
+            epoch,
+            validator_index,
+        }
+        .sign(sk, &fork, genesis_validators_root, &self.chain.spec)
     }
 
     pub fn process_block(&self, slot: Slot, block: SignedBeaconBlock<E>) -> SignedBeaconBlockHash {

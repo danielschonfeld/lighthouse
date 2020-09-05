@@ -42,6 +42,8 @@ struct ApiTester {
     next_block: SignedBeaconBlock<E>,
     attestations: Vec<Attestation<E>>,
     attester_slashing: AttesterSlashing<E>,
+    proposer_slashing: ProposerSlashing,
+    voluntary_exit: SignedVoluntaryExit,
     _server_shutdown: oneshot::Sender<()>,
     network_rx: mpsc::UnboundedReceiver<NetworkMessage<E>>,
 }
@@ -98,6 +100,11 @@ impl ApiTester {
         );
 
         let attester_slashing = harness.make_attester_slashing(vec![0, 1]);
+        let proposer_slashing = harness.make_proposer_slashing(2);
+        let voluntary_exit = harness.make_voluntary_exit(
+            3,
+            harness.chain.epoch().unwrap() + harness.chain.spec.shard_committee_period,
+        );
 
         let chain = Arc::new(harness.chain);
 
@@ -154,6 +161,8 @@ impl ApiTester {
             next_block,
             attestations,
             attester_slashing,
+            proposer_slashing,
+            voluntary_exit,
             _server_shutdown: shutdown_tx,
             network_rx,
         }
@@ -770,6 +779,23 @@ impl ApiTester {
         self
     }
 
+    pub async fn test_post_beacon_pool_attester_slashings_invalid(mut self) -> Self {
+        let mut slashing = self.attester_slashing.clone();
+        slashing.attestation_1.data.slot += 1;
+
+        self.client
+            .post_beacon_pool_attester_slashings(&slashing)
+            .await
+            .unwrap_err();
+
+        assert!(
+            self.network_rx.try_recv().is_err(),
+            "invalid attester slashing should not be sent to network"
+        );
+
+        self
+    }
+
     pub async fn test_get_beacon_pool_attester_slashings(self) -> Self {
         let result = self
             .client
@@ -785,7 +811,38 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_pool_proposer_slashings(self) -> Self {
+    pub async fn test_post_beacon_pool_proposer_slashings_valid(mut self) -> Self {
+        self.client
+            .post_beacon_pool_proposer_slashings(&self.proposer_slashing)
+            .await
+            .unwrap();
+
+        assert!(
+            self.network_rx.try_recv().is_ok(),
+            "valid proposer slashing should be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_post_beacon_pool_proposer_slashings_invalid(mut self) -> Self {
+        let mut slashing = self.proposer_slashing.clone();
+        slashing.signed_header_1.message.slot += 1;
+
+        self.client
+            .post_beacon_pool_proposer_slashings(&slashing)
+            .await
+            .unwrap_err();
+
+        assert!(
+            self.network_rx.try_recv().is_err(),
+            "invalid proposer slashing should not be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_get_beacon_pool_proposer_slashings(self) -> Self {
         let result = self
             .client
             .get_beacon_pool_proposer_slashings()
@@ -800,7 +857,38 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_pool_voluntary_exits(self) -> Self {
+    pub async fn test_post_beacon_pool_voluntary_exits_valid(mut self) -> Self {
+        self.client
+            .post_beacon_pool_voluntary_exits(&self.voluntary_exit)
+            .await
+            .unwrap();
+
+        assert!(
+            self.network_rx.try_recv().is_ok(),
+            "valid exit should be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_post_beacon_pool_voluntary_exits_invalid(mut self) -> Self {
+        let mut exit = self.voluntary_exit.clone();
+        exit.message.epoch += 1;
+
+        self.client
+            .post_beacon_pool_voluntary_exits(&exit)
+            .await
+            .unwrap_err();
+
+        assert!(
+            self.network_rx.try_recv().is_err(),
+            "invalid exit should not be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_get_beacon_pool_voluntary_exits(self) -> Self {
         let result = self
             .client
             .get_beacon_pool_voluntary_exits()
@@ -899,9 +987,9 @@ async fn beacon_pools_get() {
         .await
         .test_get_beacon_pool_attester_slashings()
         .await
-        .test_beacon_pool_proposer_slashings()
+        .test_get_beacon_pool_proposer_slashings()
         .await
-        .test_beacon_pool_voluntary_exits()
+        .test_get_beacon_pool_voluntary_exits()
         .await;
 }
 
@@ -923,5 +1011,40 @@ async fn beacon_pools_post_attestations_invalid() {
 async fn beacon_pools_post_attester_slashings_valid() {
     ApiTester::new()
         .test_post_beacon_pool_attester_slashings_valid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_attester_slashings_invalid() {
+    ApiTester::new()
+        .test_post_beacon_pool_attester_slashings_invalid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_proposer_slashings_valid() {
+    ApiTester::new()
+        .test_post_beacon_pool_proposer_slashings_valid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_proposer_slashings_invalid() {
+    ApiTester::new()
+        .test_post_beacon_pool_proposer_slashings_invalid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_voluntary_exits_valid() {
+    ApiTester::new()
+        .test_post_beacon_pool_voluntary_exits_valid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_voluntary_exits_invalid() {
+    ApiTester::new()
+        .test_post_beacon_pool_voluntary_exits_invalid()
         .await;
 }
