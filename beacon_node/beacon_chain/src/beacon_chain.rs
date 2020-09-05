@@ -519,6 +519,20 @@ impl<T: BeaconChainTypes> BeaconChain<T> {
         f(&head_lock)
     }
 
+    /// Returns the beacon block at the head of the canonical chain.
+    ///
+    /// See `Self::head` for more information.
+    pub fn head_beacon_block(&self) -> Result<SignedBeaconBlock<T::EthSpec>, Error> {
+        self.with_head(|s| s.beacon_block.clone())
+    }
+
+    /// Returns the beacon state at the head of the canonical chain.
+    ///
+    /// See `Self::head` for more information.
+    pub fn head_beacon_state(&self) -> Result<BeaconState<T::EthSpec>, Error> {
+        self.with_head(|s| s.beacon_state.clone())
+    }
+
     /// Returns info representing the head block and state.
     ///
     /// A summarized version of `Self::head` that involves less cloning.

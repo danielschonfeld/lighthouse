@@ -1,6 +1,6 @@
 use beacon_chain::{BeaconChain, BeaconChainTypes};
 use std::str::FromStr;
-use types::{Hash256, Slot};
+use types::{Hash256, SignedBeaconBlock, Slot};
 
 #[derive(Debug)]
 pub enum BlockId {
@@ -37,6 +37,25 @@ impl BlockId {
                 .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found())),
             BlockId::Root(root) => Ok(*root),
         }
+    }
+
+    pub fn block<T: BeaconChainTypes>(
+        &self,
+        chain: &BeaconChain<T>,
+    ) -> Result<SignedBeaconBlock<T::EthSpec>, warp::Rejection> {
+        let block_root = match self {
+            BlockId::Head => {
+                return chain
+                    .head_beacon_block()
+                    .map_err(crate::reject::beacon_chain_error)
+            }
+            other => other.root(chain),
+        }?;
+
+        chain
+            .get_block(&block_root)
+            .map_err(crate::reject::beacon_chain_error)
+            .and_then(|root_opt| root_opt.ok_or_else(|| warp::reject::not_found()))
     }
 }
 
