@@ -145,16 +145,10 @@ pub fn serve<T: BeaconChainTypes>(
         });
 
     // GET beacon/states/{state_id}/finality_checkpoints
-    let get_beacon_state_finality_checkpoints = warp::any()
-        .and(warp::path(API_PREFIX))
-        .and(warp::path(API_VERSION))
-        .and(warp::path("beacon"))
-        .and(warp::path("states"))
-        .and(warp::path::param::<StateId>())
+    let get_beacon_state_finality_checkpoints = beacon_states_path
+        .clone()
         .and(warp::path("finality_checkpoints"))
         .and(warp::path::end())
-        .and(warp::get())
-        .and(chain_filter.clone())
         .and_then(|state_id: StateId, chain: Arc<BeaconChain<T>>| {
             blocking_json_task(move || {
                 state_id
@@ -453,7 +447,6 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path("beacon"))
         .and(warp::path("blocks"))
         .and(warp::path::end())
-        .and(warp::post())
         .and(warp::body::json())
         .and(chain_filter.clone())
         .and(network_tx_filter.clone())
@@ -556,7 +549,6 @@ pub fn serve<T: BeaconChainTypes>(
              attestation: Attestation<T::EthSpec>,
              network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>| {
                 blocking_json_task(move || {
-                    dbg!("this");
                     let attestation = chain
                         .verify_unaggregated_attestation_for_gossip(attestation.clone(), None)
                         .map_err(|e| {
@@ -604,10 +596,50 @@ pub fn serve<T: BeaconChainTypes>(
         .and(warp::path::end())
         .and_then(|chain: Arc<BeaconChain<T>>| {
             blocking_json_task(move || {
-                let attestations = chain.op_pool.get_all_attestations();
+                let mut attestations = chain.op_pool.get_all_attestations();
+                attestations.extend(chain.naive_aggregation_pool.read().iter().cloned());
                 Ok(api_types::GenericResponse::from(attestations))
             })
         });
+
+    // POST beacon/pool/attester_slashings
+    let post_beacon_pool_attester_slashings = beacon_pool_path
+        .clone()
+        .and(warp::path("attester_slashings"))
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(network_tx_filter.clone())
+        .and_then(
+            |chain: Arc<BeaconChain<T>>,
+             slashing: AttesterSlashing<T::EthSpec>,
+             network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>| {
+                blocking_json_task(move || {
+                    let outcome = chain
+                        .verify_attester_slashing_for_gossip(slashing.clone())
+                        .map_err(|e| {
+                            crate::reject::object_invalid(format!(
+                                "gossip verification failed: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    if let ObservationOutcome::New(slashing) = outcome {
+                        publish_network_message(
+                            &network_tx,
+                            PubsubMessage::AttesterSlashing(Box::new(
+                                slashing.clone().into_inner(),
+                            )),
+                        )?;
+
+                        chain
+                            .import_attester_slashing(slashing)
+                            .map_err(crate::reject::beacon_chain_error)?;
+                    }
+
+                    Ok(())
+                })
+            },
+        );
 
     // GET beacon/pool/attester_slashings
     let get_beacon_pool_attester_slashings = beacon_pool_path
@@ -621,6 +653,43 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
+    // POST beacon/pool/proposer_slashings
+    let post_beacon_pool_proposer_slashings = beacon_pool_path
+        .clone()
+        .and(warp::path("proposer_slashings"))
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(network_tx_filter.clone())
+        .and_then(
+            |chain: Arc<BeaconChain<T>>,
+             slashing: ProposerSlashing,
+             network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>| {
+                blocking_json_task(move || {
+                    let outcome = chain
+                        .verify_proposer_slashing_for_gossip(slashing.clone())
+                        .map_err(|e| {
+                            crate::reject::object_invalid(format!(
+                                "gossip verification failed: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    if let ObservationOutcome::New(slashing) = outcome {
+                        publish_network_message(
+                            &network_tx,
+                            PubsubMessage::ProposerSlashing(Box::new(
+                                slashing.clone().into_inner(),
+                            )),
+                        )?;
+
+                        chain.import_proposer_slashing(slashing);
+                    }
+
+                    Ok(())
+                })
+            },
+        );
+
     // GET beacon/pool/proposer_slashings
     let get_beacon_pool_proposer_slashings = beacon_pool_path
         .clone()
@@ -632,6 +701,41 @@ pub fn serve<T: BeaconChainTypes>(
                 Ok(api_types::GenericResponse::from(attestations))
             })
         });
+
+    // POST beacon/pool/voluntary_exits
+    let post_beacon_pool_voluntary_exits = beacon_pool_path
+        .clone()
+        .and(warp::path("voluntary_exits"))
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(network_tx_filter.clone())
+        .and_then(
+            |chain: Arc<BeaconChain<T>>,
+             exit: SignedVoluntaryExit,
+             network_tx: UnboundedSender<NetworkMessage<T::EthSpec>>| {
+                blocking_json_task(move || {
+                    let outcome = chain
+                        .verify_voluntary_exit_for_gossip(exit.clone())
+                        .map_err(|e| {
+                            crate::reject::object_invalid(format!(
+                                "gossip verification failed: {:?}",
+                                e
+                            ))
+                        })?;
+
+                    if let ObservationOutcome::New(exit) = outcome {
+                        publish_network_message(
+                            &network_tx,
+                            PubsubMessage::VoluntaryExit(Box::new(exit.clone().into_inner())),
+                        )?;
+
+                        chain.import_voluntary_exit(exit);
+                    }
+
+                    Ok(())
+                })
+            },
+        );
 
     // GET beacon/pool/voluntary_exits
     let get_beacon_pool_voluntary_exits = beacon_pool_path
@@ -645,6 +749,112 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
+    /*
+    let routes = warp::get()
+        .and(
+            get_beacon_genesis
+                .or(get_beacon_state_root.boxed())
+                .or(get_beacon_state_fork.boxed())
+                .or(get_beacon_state_finality_checkpoints.boxed())
+                .or(get_beacon_state_validators.boxed())
+                .or(get_beacon_state_validators_id.boxed())
+                .or(get_beacon_state_committees.boxed())
+                .or(get_beacon_headers.boxed())
+                .or(get_beacon_headers_block_id.boxed())
+                .or(get_beacon_block.boxed())
+                .or(get_beacon_block_attestations.boxed())
+                .or(get_beacon_block_root.boxed())
+                .or(get_beacon_pool_attestations.boxed())
+                .or(get_beacon_pool_attester_slashings.boxed())
+                .or(get_beacon_pool_proposer_slashings.boxed())
+                .or(get_beacon_pool_voluntary_exits.boxed())
+                .boxed(),
+        )
+        .or(warp::post().and(
+            post_beacon_blocks, /*
+                                        .or(post_beacon_pool_attestations.boxed())
+                                        .or(post_beacon_pool_attester_slashings.boxed())
+                                        .or(post_beacon_pool_proposer_slashings.boxed())
+                                        .or(post_beacon_pool_voluntary_exits.boxed())
+                                        .boxed(),
+                                */
+        ))
+        .recover(crate::reject::handle_rejection);
+
+    fn combine_methods(mut methods: Vec<warp::Rejection>) -> warp::Rejection {
+        let candidate = methods
+            .iter()
+            .position(|err| {
+                !err.is_not_found() && !err.find::<warp::reject::MethodNotAllowed>().is_some()
+            })
+            .or_else(|| {
+                methods
+                    .iter()
+                    .position(|err| !err.find::<warp::reject::MethodNotAllowed>().is_some())
+            });
+
+        candidate
+            .map(|i| methods.remove(i))
+            .unwrap_or_else(|| warp::reject::not_found())
+    }
+
+    fn combine_methods(mut methods: Vec<warp::Rejection>) -> warp::Rejection {
+        let candidate = methods
+            .iter()
+            .position(|err| {
+                !err.is_not_found() && !err.find::<warp::reject::MethodNotAllowed>().is_some()
+            })
+            .or_else(|| {
+                methods
+                    .iter()
+                    .position(|err| !err.find::<warp::reject::MethodNotAllowed>().is_some())
+            });
+
+        candidate
+            .map(|i| methods.remove(i))
+            .unwrap_or_else(|| warp::reject::not_found())
+    }
+
+    async fn ignore_bad_request(err: warp::Rejection) -> warp::Rejection {
+        if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
+            warp::reject::not_found()
+        } else {
+            err
+        }
+    }
+    */
+
+    let routes = warp::get()
+        .and(
+            get_beacon_genesis
+                .or(get_beacon_state_root.boxed())
+                .or(get_beacon_state_fork.boxed())
+                .or(get_beacon_state_finality_checkpoints.boxed())
+                .or(get_beacon_state_validators.boxed())
+                .or(get_beacon_state_validators_id.boxed())
+                .or(get_beacon_state_committees.boxed())
+                .or(get_beacon_headers.boxed())
+                .or(get_beacon_headers_block_id.boxed())
+                .or(get_beacon_block.boxed())
+                .or(get_beacon_block_attestations.boxed())
+                .or(get_beacon_block_root.boxed())
+                .or(get_beacon_pool_attestations.boxed())
+                .or(get_beacon_pool_attester_slashings.boxed())
+                .or(get_beacon_pool_proposer_slashings.boxed())
+                .or(get_beacon_pool_voluntary_exits.boxed())
+                .boxed(),
+        )
+        .or(warp::post().and(
+            post_beacon_blocks
+                .or(post_beacon_pool_attestations.boxed())
+                .or(post_beacon_pool_attester_slashings.boxed())
+                .or(post_beacon_pool_proposer_slashings.boxed())
+                .or(post_beacon_pool_voluntary_exits.boxed())
+                .boxed(),
+        ))
+        .recover(crate::reject::handle_rejection);
+
+    /*
     let routes = get_beacon_genesis
         .or(get_beacon_state_root)
         .or(get_beacon_state_fork)
@@ -658,11 +868,16 @@ pub fn serve<T: BeaconChainTypes>(
         .or(get_beacon_block)
         .or(get_beacon_block_attestations)
         .or(get_beacon_block_root)
+        .or(post_beacon_pool_attestations)
         .or(get_beacon_pool_attestations)
+        .or(post_beacon_pool_attester_slashings)
         .or(get_beacon_pool_attester_slashings)
+        .or(post_beacon_pool_proposer_slashings)
         .or(get_beacon_pool_proposer_slashings)
+        .or(post_beacon_pool_voluntary_exits)
         .or(get_beacon_pool_voluntary_exits)
         .recover(crate::reject::handle_rejection);
+    */
 
     let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(
         SocketAddrV4::new(config.listen_addr, config.listen_port),

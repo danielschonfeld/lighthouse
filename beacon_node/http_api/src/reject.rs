@@ -1,6 +1,5 @@
 use eth2::types::ErrorMessage;
 use std::convert::Infallible;
-use std::error::Error;
 use warp::{http::StatusCode, reject::Reject};
 
 #[derive(Debug)]
@@ -67,23 +66,8 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
         code = StatusCode::NOT_FOUND;
         message = "NOT_FOUND".to_string();
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        // This error happens if the body could not be deserialized correctly
-        // We can use the cause to analyze the error and customize the error message
-        message = match e.source() {
-            Some(cause) => {
-                if cause.to_string().contains("denom") {
-                    "FIELD_ERROR: denom"
-                } else {
-                    "BAD_REQUEST"
-                }
-            }
-            None => "BAD_REQUEST",
-        }
-        .to_string();
+        message = format!("BAD_REQUEST: body deserialize error: {}", e);
         code = StatusCode::BAD_REQUEST;
-    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
-        code = StatusCode::METHOD_NOT_ALLOWED;
-        message = "METHOD_NOT_ALLOWED".to_string();
     } else if let Some(e) = err.find::<warp::reject::InvalidQuery>() {
         code = StatusCode::BAD_REQUEST;
         message = format!("BAD_REQUEST (invalid query): {}", e);
@@ -109,9 +93,10 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, 
     } else if let Some(e) = err.find::<crate::reject::ObjectInvalid>() {
         code = StatusCode::BAD_REQUEST;
         message = format!("BAD_REQUEST: Invalid object: {}", e.0);
+    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
+        code = StatusCode::METHOD_NOT_ALLOWED;
+        message = "METHOD_NOT_ALLOWED".to_string();
     } else {
-        // We should have expected this... Just log and say its a 500
-        eprintln!("unhandled rejection: {:?}", err);
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = "UNHANDLED_REJECTION".to_string();
     }

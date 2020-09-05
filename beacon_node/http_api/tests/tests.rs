@@ -696,11 +696,29 @@ impl ApiTester {
                 .await
                 .unwrap();
 
-            std::thread::sleep(std::time::Duration::from_secs(1));
-
             assert!(
                 self.network_rx.try_recv().is_ok(),
                 "valid attestation should be sent to network"
+            );
+        }
+
+        self
+    }
+
+    pub async fn test_post_beacon_pool_attestations_invalid(mut self) -> Self {
+        for attestation in &self.attestations {
+            let mut attestation = attestation.clone();
+            attestation.data.slot += 1;
+
+            assert!(self
+                .client
+                .post_beacon_pool_attestations(&attestation)
+                .await
+                .is_err());
+
+            assert!(
+                self.network_rx.try_recv().is_ok(),
+                "invalid attestation should not be sent to network"
             );
         }
 
@@ -862,5 +880,12 @@ async fn beacon_pools_get() {
 async fn beacon_pools_post_attestations_valid() {
     ApiTester::new()
         .test_post_beacon_pool_attestations_valid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_attestations_invalid() {
+    ApiTester::new()
+        .test_post_beacon_pool_attestations_invalid()
         .await;
 }
