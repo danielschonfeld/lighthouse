@@ -26,9 +26,10 @@ use store::{config::StoreConfig, BlockReplay, HotColdDB, ItemStore, LevelDB, Mem
 use tempfile::{tempdir, TempDir};
 use tree_hash::TreeHash;
 use types::{
-    AggregateSignature, Attestation, BeaconState, BeaconStateHash, ChainSpec, Domain, Epoch,
-    EthSpec, Hash256, Keypair, SelectionProof, SignedAggregateAndProof, SignedBeaconBlock,
-    SignedBeaconBlockHash, SignedRoot, Slot, SubnetId,
+    AggregateSignature, Attestation, AttestationData, AttesterSlashing, BeaconState,
+    BeaconStateHash, ChainSpec, Checkpoint, Domain, Epoch, EthSpec, Hash256, IndexedAttestation,
+    Keypair, SelectionProof, SignedAggregateAndProof, SignedBeaconBlock, SignedBeaconBlockHash,
+    SignedRoot, Slot, SubnetId, VariableList,
 };
 
 pub use types::test_utils::generate_deterministic_keypairs;
@@ -599,6 +600,53 @@ where
             .into_iter()
             .zip(aggregated_attestations)
             .collect()
+    }
+
+    pub fn make_attester_slashing(&self, indices: Vec<u64>) -> AttesterSlashing<E> {
+        let mut attestation_1 = IndexedAttestation {
+            attesting_indices: VariableList::new(indices).unwrap(),
+            data: AttestationData {
+                slot: Slot::new(0),
+                index: 0,
+                beacon_block_root: Hash256::zero(),
+                target: Checkpoint {
+                    root: Hash256::zero(),
+                    epoch: Epoch::new(0),
+                },
+                source: Checkpoint {
+                    root: Hash256::zero(),
+                    epoch: Epoch::new(0),
+                },
+            },
+            signature: AggregateSignature::infinity(),
+        };
+
+        let mut attestation_2 = attestation_1.clone();
+        attestation_2.data.index += 1;
+
+        for attestation in &mut [&mut attestation_1, &mut attestation_2] {
+            for &i in &attestation.attesting_indices {
+                let sk = &self.validators_keypairs[i as usize].sk;
+
+                let fork = self.chain.head_info().unwrap().fork.clone();
+                let genesis_validators_root = self.chain.genesis_validators_root;
+
+                let domain = self.chain.spec.get_domain(
+                    attestation.data.target.epoch,
+                    Domain::BeaconAttester,
+                    &fork,
+                    genesis_validators_root,
+                );
+                let message = attestation.data.signing_root(domain);
+
+                attestation.signature.add_assign(&sk.sign(message));
+            }
+        }
+
+        AttesterSlashing {
+            attestation_1,
+            attestation_2,
+        }
     }
 
     pub fn process_block(&self, slot: Slot, block: SignedBeaconBlock<E>) -> SignedBeaconBlockHash {

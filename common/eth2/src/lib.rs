@@ -378,7 +378,7 @@ impl BeaconNodeClient {
     /// `POST beacon/pool/attester_slashings`
     pub async fn post_beacon_pool_attester_slashings<T: EthSpec>(
         &self,
-        slashing: AttesterSlashing<T>,
+        slashing: &AttesterSlashing<T>,
     ) -> Result<(), Error> {
         let mut path = self.server.clone();
 
@@ -388,7 +388,7 @@ impl BeaconNodeClient {
             .push("pool")
             .push("attester_slashings");
 
-        self.post(path, &slashing).await?;
+        self.post(path, slashing).await?;
 
         Ok(())
     }
@@ -411,7 +411,7 @@ impl BeaconNodeClient {
     /// `POST beacon/pool/proposer_slashings`
     pub async fn post_beacon_pool_proposer_slashings<T: EthSpec>(
         &self,
-        slashing: ProposerSlashing,
+        slashing: &ProposerSlashing,
     ) -> Result<(), Error> {
         let mut path = self.server.clone();
 
@@ -421,7 +421,7 @@ impl BeaconNodeClient {
             .push("pool")
             .push("proposer_slashings");
 
-        self.post(path, &slashing).await?;
+        self.post(path, slashing).await?;
 
         Ok(())
     }
@@ -444,7 +444,7 @@ impl BeaconNodeClient {
     /// `POST beacon/pool/voluntary_exits`
     pub async fn post_beacon_pool_voluntary_exits(
         &self,
-        exit: SignedVoluntaryExit,
+        exit: &SignedVoluntaryExit,
     ) -> Result<(), Error> {
         let mut path = self.server.clone();
 
@@ -454,7 +454,7 @@ impl BeaconNodeClient {
             .push("pool")
             .push("voluntary_exits");
 
-        self.post(path, &exit).await?;
+        self.post(path, exit).await?;
 
         Ok(())
     }

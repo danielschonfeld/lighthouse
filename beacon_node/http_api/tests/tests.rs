@@ -41,6 +41,7 @@ struct ApiTester {
     client: BeaconNodeClient,
     next_block: SignedBeaconBlock<E>,
     attestations: Vec<Attestation<E>>,
+    attester_slashing: AttesterSlashing<E>,
     _server_shutdown: oneshot::Sender<()>,
     network_rx: mpsc::UnboundedReceiver<NetworkMessage<E>>,
 }
@@ -96,6 +97,8 @@ impl ApiTester {
             "precondition: attestations for testing"
         );
 
+        let attester_slashing = harness.make_attester_slashing(vec![0, 1]);
+
         let chain = Arc::new(harness.chain);
 
         assert_eq!(
@@ -150,6 +153,7 @@ impl ApiTester {
             client,
             next_block,
             attestations,
+            attester_slashing,
             _server_shutdown: shutdown_tx,
             network_rx,
         }
@@ -752,7 +756,21 @@ impl ApiTester {
         self
     }
 
-    pub async fn test_beacon_pool_attester_slashings(self) -> Self {
+    pub async fn test_post_beacon_pool_attester_slashings_valid(mut self) -> Self {
+        self.client
+            .post_beacon_pool_attester_slashings(&self.attester_slashing)
+            .await
+            .unwrap();
+
+        assert!(
+            self.network_rx.try_recv().is_ok(),
+            "valid attester slashing should be sent to network"
+        );
+
+        self
+    }
+
+    pub async fn test_get_beacon_pool_attester_slashings(self) -> Self {
         let result = self
             .client
             .get_beacon_pool_attester_slashings()
@@ -879,7 +897,7 @@ async fn beacon_pools_get() {
     ApiTester::new()
         .test_get_beacon_pool_attestations()
         .await
-        .test_beacon_pool_attester_slashings()
+        .test_get_beacon_pool_attester_slashings()
         .await
         .test_beacon_pool_proposer_slashings()
         .await
@@ -898,5 +916,12 @@ async fn beacon_pools_post_attestations_valid() {
 async fn beacon_pools_post_attestations_invalid() {
     ApiTester::new()
         .test_post_beacon_pool_attestations_invalid()
+        .await;
+}
+
+#[tokio::test(core_threads = 2)]
+async fn beacon_pools_post_attester_slashings_valid() {
+    ApiTester::new()
+        .test_post_beacon_pool_attester_slashings_valid()
         .await;
 }
