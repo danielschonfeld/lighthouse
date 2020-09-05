@@ -442,8 +442,8 @@ where
         let committee_count = state.get_committee_count_at_slot(state.slot).unwrap();
 
         state
-            .get_beacon_committees_at_slot(state.slot)
-            .unwrap()
+            .get_beacon_committees_at_slot(attestation_slot)
+            .expect("should get committees")
             .iter()
             .map(|bc| {
                 bc.committee
