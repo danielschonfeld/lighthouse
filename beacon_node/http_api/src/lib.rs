@@ -749,81 +749,6 @@ pub fn serve<T: BeaconChainTypes>(
             })
         });
 
-    /*
-    let routes = warp::get()
-        .and(
-            get_beacon_genesis
-                .or(get_beacon_state_root.boxed())
-                .or(get_beacon_state_fork.boxed())
-                .or(get_beacon_state_finality_checkpoints.boxed())
-                .or(get_beacon_state_validators.boxed())
-                .or(get_beacon_state_validators_id.boxed())
-                .or(get_beacon_state_committees.boxed())
-                .or(get_beacon_headers.boxed())
-                .or(get_beacon_headers_block_id.boxed())
-                .or(get_beacon_block.boxed())
-                .or(get_beacon_block_attestations.boxed())
-                .or(get_beacon_block_root.boxed())
-                .or(get_beacon_pool_attestations.boxed())
-                .or(get_beacon_pool_attester_slashings.boxed())
-                .or(get_beacon_pool_proposer_slashings.boxed())
-                .or(get_beacon_pool_voluntary_exits.boxed())
-                .boxed(),
-        )
-        .or(warp::post().and(
-            post_beacon_blocks, /*
-                                        .or(post_beacon_pool_attestations.boxed())
-                                        .or(post_beacon_pool_attester_slashings.boxed())
-                                        .or(post_beacon_pool_proposer_slashings.boxed())
-                                        .or(post_beacon_pool_voluntary_exits.boxed())
-                                        .boxed(),
-                                */
-        ))
-        .recover(crate::reject::handle_rejection);
-
-    fn combine_methods(mut methods: Vec<warp::Rejection>) -> warp::Rejection {
-        let candidate = methods
-            .iter()
-            .position(|err| {
-                !err.is_not_found() && !err.find::<warp::reject::MethodNotAllowed>().is_some()
-            })
-            .or_else(|| {
-                methods
-                    .iter()
-                    .position(|err| !err.find::<warp::reject::MethodNotAllowed>().is_some())
-            });
-
-        candidate
-            .map(|i| methods.remove(i))
-            .unwrap_or_else(|| warp::reject::not_found())
-    }
-
-    fn combine_methods(mut methods: Vec<warp::Rejection>) -> warp::Rejection {
-        let candidate = methods
-            .iter()
-            .position(|err| {
-                !err.is_not_found() && !err.find::<warp::reject::MethodNotAllowed>().is_some()
-            })
-            .or_else(|| {
-                methods
-                    .iter()
-                    .position(|err| !err.find::<warp::reject::MethodNotAllowed>().is_some())
-            });
-
-        candidate
-            .map(|i| methods.remove(i))
-            .unwrap_or_else(|| warp::reject::not_found())
-    }
-
-    async fn ignore_bad_request(err: warp::Rejection) -> warp::Rejection {
-        if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
-            warp::reject::not_found()
-        } else {
-            err
-        }
-    }
-    */
-
     let routes = warp::get()
         .and(
             get_beacon_genesis
@@ -853,31 +778,6 @@ pub fn serve<T: BeaconChainTypes>(
                 .boxed(),
         ))
         .recover(crate::reject::handle_rejection);
-
-    /*
-    let routes = get_beacon_genesis
-        .or(get_beacon_state_root)
-        .or(get_beacon_state_fork)
-        .or(get_beacon_state_finality_checkpoints)
-        .or(get_beacon_state_validators)
-        .or(get_beacon_state_validators_id)
-        .or(get_beacon_state_committees)
-        .or(get_beacon_headers)
-        .or(get_beacon_headers_block_id)
-        .or(post_beacon_blocks)
-        .or(get_beacon_block)
-        .or(get_beacon_block_attestations)
-        .or(get_beacon_block_root)
-        .or(post_beacon_pool_attestations)
-        .or(get_beacon_pool_attestations)
-        .or(post_beacon_pool_attester_slashings)
-        .or(get_beacon_pool_attester_slashings)
-        .or(post_beacon_pool_proposer_slashings)
-        .or(get_beacon_pool_proposer_slashings)
-        .or(post_beacon_pool_voluntary_exits)
-        .or(get_beacon_pool_voluntary_exits)
-        .recover(crate::reject::handle_rejection);
-    */
 
     let (listening_socket, server) = warp::serve(routes).try_bind_with_graceful_shutdown(
         SocketAddrV4::new(config.listen_addr, config.listen_port),
