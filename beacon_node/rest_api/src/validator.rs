@@ -473,7 +473,7 @@ fn process_unaggregated_attestation<T: BeaconChainTypes>(
 
     // Verify that the attestation is valid to included on the gossip network.
     let verified_attestation = beacon_chain
-        .verify_unaggregated_attestation_for_gossip(attestation.clone(), subnet_id)
+        .verify_unaggregated_attestation_for_gossip(attestation.clone(), Some(subnet_id))
         .map_err(|e| {
             handle_attestation_error(
                 e,
