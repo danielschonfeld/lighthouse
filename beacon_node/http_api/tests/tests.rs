@@ -254,6 +254,13 @@ impl ApiTester {
         }
     }
 
+    pub fn increase_slot(self, count: u64) -> Self {
+        self.chain
+            .slot_clock
+            .set_slot(self.chain.slot().unwrap().as_u64() + count);
+        self
+    }
+
     pub async fn test_beacon_genesis(self) -> Self {
         let result = self.client.get_beacon_genesis().await.unwrap().data;
 
@@ -1037,7 +1044,11 @@ async fn beacon_pools_post_proposer_slashings_invalid() {
 
 #[tokio::test(core_threads = 2)]
 async fn beacon_pools_post_voluntary_exits_valid() {
+    let shard_committee_period = E::default_spec().shard_committee_period;
+
     ApiTester::new()
+        // Prevents a "too young to exit" error.
+        .increase_slot(shard_committee_period * SLOTS_PER_EPOCH)
         .test_post_beacon_pool_voluntary_exits_valid()
         .await;
 }
