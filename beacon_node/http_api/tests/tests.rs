@@ -69,12 +69,19 @@ impl ApiTester {
 
         let (next_block, _next_state) = harness.get_block();
         let head = harness.chain.head().unwrap();
+
+        assert_eq!(
+            harness.chain.slot().unwrap(),
+            head.beacon_block.slot() + 1,
+            "precondition: current slot is one after head"
+        );
+
         let attestations = harness
             .get_unaggregated_attestations(
                 &AttestationStrategy::AllValidators,
                 &head.beacon_state,
                 head.beacon_block_root,
-                head.beacon_state.slot + 1,
+                harness.chain.slot().unwrap(),
             )
             .into_iter()
             .map(|vec| vec.into_iter().map(|(attestation, _subnet_id)| attestation))
@@ -717,7 +724,7 @@ impl ApiTester {
                 .is_err());
 
             assert!(
-                self.network_rx.try_recv().is_ok(),
+                self.network_rx.try_recv().is_err(),
                 "invalid attestation should not be sent to network"
             );
         }
