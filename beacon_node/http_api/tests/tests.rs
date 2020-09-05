@@ -1,5 +1,8 @@
 use beacon_chain::{
-    test_utils::{AttestationStrategy, BeaconChainHarness, BlockStrategy, HarnessType},
+    test_utils::{
+        AttestationStrategy, BeaconChainHarness, BlockStrategy,
+        BlockingMigratorEphemeralHarnessType,
+    },
     BeaconChain,
 };
 use environment::null_logger;
@@ -8,7 +11,6 @@ use http_api::{Config, Context};
 use network::NetworkMessage;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
-use store::config::StoreConfig;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use types::{
@@ -35,7 +37,7 @@ const SKIPPED_SLOTS: &[u64] = &[
 ];
 
 struct ApiTester {
-    chain: Arc<BeaconChain<HarnessType<E>>>,
+    chain: Arc<BeaconChain<BlockingMigratorEphemeralHarnessType<E>>>,
     client: BeaconNodeClient,
     next_block: SignedBeaconBlock<E>,
     attestations: Vec<Attestation<E>>,
@@ -45,10 +47,9 @@ struct ApiTester {
 
 impl ApiTester {
     pub fn new() -> Self {
-        let harness = BeaconChainHarness::new(
+        let mut harness = BeaconChainHarness::new(
             MainnetEthSpec,
             generate_deterministic_keypairs(VALIDATOR_COUNT),
-            StoreConfig::default(),
         );
 
         harness.advance_slot();
@@ -67,7 +68,6 @@ impl ApiTester {
             harness.advance_slot();
         }
 
-        let (next_block, _next_state) = harness.get_block();
         let head = harness.chain.head().unwrap();
 
         assert_eq!(
@@ -75,6 +75,9 @@ impl ApiTester {
             head.beacon_block.slot() + 1,
             "precondition: current slot is one after head"
         );
+
+        let (next_block, _next_state) =
+            harness.make_block(head.beacon_state.clone(), harness.chain.slot().unwrap());
 
         let attestations = harness
             .get_unaggregated_attestations(
@@ -434,7 +437,7 @@ impl ApiTester {
 
     pub async fn test_beacon_states_committees(self) -> Self {
         for state_id in self.interesting_state_ids() {
-            let state_opt = self.get_state(state_id);
+            let mut state_opt = self.get_state(state_id);
 
             let epoch = state_opt
                 .as_ref()
@@ -452,7 +455,8 @@ impl ApiTester {
                 continue;
             }
 
-            let state = state_opt.as_ref().expect("result should be none");
+            let state = state_opt.as_mut().expect("result should be none");
+            state.build_all_committee_caches(&self.chain.spec).unwrap();
             let committees = state
                 .get_beacon_committees_at_epoch(
                     RelativeEpoch::from_epoch(state.current_epoch(), epoch).unwrap(),

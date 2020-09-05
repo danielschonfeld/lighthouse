@@ -535,14 +535,17 @@ impl<T: BeaconChainTypes> BeaconChain<T> {
     ///
     /// See `Self::head` for more information.
     pub fn head_beacon_block(&self) -> Result<SignedBeaconBlock<T::EthSpec>, Error> {
-        self.with_head(|s| s.beacon_block.clone())
+        self.with_head(|s| Ok(s.beacon_block.clone()))
     }
 
     /// Returns the beacon state at the head of the canonical chain.
     ///
     /// See `Self::head` for more information.
     pub fn head_beacon_state(&self) -> Result<BeaconState<T::EthSpec>, Error> {
-        self.with_head(|s| s.beacon_state.clone())
+        self.with_head(|s| {
+            Ok(s.beacon_state
+                .clone_with(CloneConfig::committee_caches_only()))
+        })
     }
 
     /// Returns info representing the head block and state.

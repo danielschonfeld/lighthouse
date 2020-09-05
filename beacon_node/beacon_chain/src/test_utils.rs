@@ -612,7 +612,10 @@ where
         for (unaggregated_attestations, maybe_signed_aggregate) in attestations.into_iter() {
             for (attestation, subnet_id) in unaggregated_attestations {
                 self.chain
-                    .verify_unaggregated_attestation_for_gossip(attestation.clone(), subnet_id)
+                    .verify_unaggregated_attestation_for_gossip(
+                        attestation.clone(),
+                        Some(subnet_id),
+                    )
                     .unwrap()
                     .add_to_pool(&self.chain)
                     .unwrap();

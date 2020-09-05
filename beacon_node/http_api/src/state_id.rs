@@ -83,7 +83,7 @@ impl StateId {
         match &self.0 {
             CoreStateId::Head => {
                 return chain
-                    .map_head(|snapshot| func(&snapshot.beacon_state))
+                    .with_head(|snapshot| Ok(func(&snapshot.beacon_state)))
                     .map_err(crate::reject::beacon_chain_error)?
             }
             _ => func(&self.state(chain)?),
