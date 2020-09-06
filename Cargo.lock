@@ -4827,6 +4827,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "serde_utils",
  "tempfile",
  "tree_hash",
  "types",

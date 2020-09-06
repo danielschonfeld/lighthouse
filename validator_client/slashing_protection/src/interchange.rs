@@ -1,7 +1,8 @@
 use serde_derive::{Deserialize, Serialize};
+use serde_utils::quoted_u64::Quoted;
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use types::{serde_utils::Quoted, Epoch, Hash256, PublicKey, Slot};
+use types::{Epoch, Hash256, PublicKey, Slot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -14,7 +15,7 @@ pub enum InterchangeFormat {
 #[serde(deny_unknown_fields)]
 pub struct InterchangeMetadata {
     pub interchange_format: InterchangeFormat,
-    #[serde(with = "types::serde_utils::only_quoted")]
+    #[serde(with = "serde_utils::quoted_u64::require_quotes")]
     pub interchange_format_version: u64,
     pub genesis_validators_root: Hash256,
 }
@@ -64,7 +65,7 @@ pub struct CompleteInterchangeData {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedBlock {
-    #[serde(with = "types::serde_utils::only_quoted")]
+    #[serde(with = "serde_utils::quoted_u64::require_quotes")]
     pub slot: Slot,
     pub signing_root: Option<Hash256>,
 }
@@ -72,9 +73,9 @@ pub struct SignedBlock {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SignedAttestation {
-    #[serde(with = "types::serde_utils::only_quoted")]
+    #[serde(with = "serde_utils::quoted_u64::require_quotes")]
     pub source_epoch: Epoch,
-    #[serde(with = "types::serde_utils::only_quoted")]
+    #[serde(with = "serde_utils::quoted_u64::require_quotes")]
     pub target_epoch: Epoch,
     pub signing_root: Option<Hash256>,
 }
